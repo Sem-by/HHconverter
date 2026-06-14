@@ -1,6 +1,6 @@
 # HHConverter
 
-Convert tournament hand histories from multiple poker rooms into **PokerStars-style** text for **Hand2Note 3** import.
+Convert tournament hand histories from multiple poker rooms into **PokerStars-style** text for **Hand2Note 3**.
 
 Supports **PokerPlanets**, **GGPokerOK**, **UPoker**, and **CoinPoker**, with optional Dropbox backup and **Chico** hands copy.
 
