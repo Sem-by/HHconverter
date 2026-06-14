@@ -1,0 +1,36 @@
+# Local config (paths, nickname)
+config.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist-info/
+*.egg
+.venv/
+venv/
+env/
+
+# PyInstaller
+build/HHConverter/
+build/__pycache__/
+dist/
+*.spec.bak
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+.cursor/
+
+# Local runtime folders (created next to the app)
+import/
+export/
+*.zip
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store

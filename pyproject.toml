@@ -1,0 +1,26 @@
+[project]
+name = "converter"
+version = "0.1.0"
+description = "Convert multi-room tournament hand histories to PokerStars-style text for Hand2Note"
+requires-python = ">=3.11"
+dependencies = [
+    "tzdata>=2024.2",
+]
+
+[project.scripts]
+hh-converter = "converter.cli:main"
+hh-converter-gui = "converter.gui:main"
+
+[project.optional-dependencies]
+build = ["pyinstaller>=6.0"]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["converter*"]
+
+[tool.setuptools.package-data]
+converter = ["assets/*"]

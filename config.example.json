@@ -1,0 +1,12 @@
+{
+  "import_path": "import",
+  "export_path": "export",
+  "dropbox_base_path": "",
+  "dropbox_mode": "none",
+
+  "chico_import_path": null,
+
+  "clear_import_after_convert": false,
+
+  "player_alias": "Hero"
+}
