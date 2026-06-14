@@ -2,7 +2,7 @@
 
 Convert tournament hand histories from multiple poker rooms into **PokerStars-style** text for **Hand2Note 3**.
 
-Supports **PokerPlanets**, **GGPokerOK**, **UPoker**, and **CoinPoker**, with optional Dropbox backup and **Chico** hands copy.
+Supports **PokerPlanets**, **GGPokerOK**, **UPPoker**, and **CoinPoker**, with optional Dropbox backup and **Chico** hands copy.
 
 ## Features
 
