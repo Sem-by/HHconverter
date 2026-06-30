@@ -55,6 +55,7 @@ Hand History Converter
    • Import folder — raw hand history .txt files (default: import/)
    • Export folder — converted output (default: export/)
    • Clear Import folder after converting — removes source .txt files when done (after Dropbox copy, if enabled)
+   • Coin hands as PS - export CoinPoker as PokerStars (for Hand2Note without Pro/Asia subscription)
    • Copy to Dropbox — mirrors raw hands to Dropbox; shows Dropbox and optional Chico folders
    • Nickname — hero name in converted GG / UP / Coin hands (default: Hero)
 
@@ -76,6 +77,7 @@ You will be prompted to open Settings if any are missing.
    • Папка Import — исходные .txt файлы истории раздач (по умолчанию: import/)
    • Папка Export — сконвертированные файлы (по умолчанию: export/)
    • Очистить папку Import после конвертации — удаляет исходные .txt после завершения (после копирования в Dropbox, если включено)
+   • Coin hands as PS — экспорт CoinPoker в формате PokerStars (для Hand2Note без подписки Pro/Asia)
    • Копировать в Dropbox — копирует исходные файлы в Dropbox; открывает поля Dropbox и Chico (необязательно)
    • Никнейм — имя героя в конвертированных раздачах GG / UP / Coin (по умолчанию: Hero)
 
@@ -97,6 +99,7 @@ You will be prompted to open Settings if any are missing.
    • Папка Import — вихідні .txt файли історії роздач (за замовчуванням: import/)
    • Папка Export — сконвертовані файли (за замовчуванням: export/)
    • Очистити папку Import після конвертації — видаляє вихідні .txt після завершення (після копіювання в Dropbox, якщо увімкнено)
+   • Coin hands as PS — експорт CoinPoker у форматі PokerStars (для Hand2Note без підписки Pro/Asia)
    • Копіювати в Dropbox — копіює вихідні файли в Dropbox; показує поля Dropbox і Chico (необов'язково)
    • Нікнейм — ім'я героя в сконвертованих роздачах GG / UP / Coin (за замовчуванням: Hero)
 
@@ -118,6 +121,7 @@ You will be prompted to open Settings if any are missing.
    • Import қалтасы — бастапқы .txt раздаға тарихы файлдары (әдепкі: import/)
    • Export қалтасы — түрлендірілген шығыс (әдепкі: export/)
    • Түрлендіргеннен кейін Import қалтасын тазарту — аяқталғаннан кейін бастапқы .txt файлдарын жояды (қосулы болса, Dropbox көшіруінен кейін)
+   • Coin hands as PS — CoinPoker-ді PokerStars форматында экспорттау (Hand2Note Pro/Asia жазылымысыз)
    • Dropbox-қа көшіру — бастапқы файлдарды Dropbox-қа көшіреді; Dropbox және Chico қалталарын көрсетеді (міндетті емес)
    • Лақап аты — түрлендірілген GG / UP / Coin раздачаларындағы кейіпкер аты (әдепкі: Hero)
 
@@ -139,6 +143,7 @@ Convertisseur d'historiques de mains
    • Dossier Import — fichiers .txt d'historiques bruts (par défaut : import/)
    • Dossier Export — fichiers convertis (par défaut : export/)
    • Vider le dossier Import après conversion — supprime les .txt sources une fois terminé (après la copie Dropbox, si activé)
+   • Coin hands as PS — export CoinPoker en PokerStars (Hand2Note sans abonnement Pro/Asia)
    • Copier vers Dropbox — copie les mains brutes vers Dropbox ; affiche les dossiers Dropbox et Chico (facultatif)
    • Pseudo — nom du héros dans les mains GG / UP / Coin converties (par défaut : Hero)
 
@@ -160,6 +165,7 @@ Convertidor de historiales de manos
    • Carpeta Import — archivos .txt de historiales sin convertir (predeterminado: import/)
    • Carpeta Export — archivos convertidos (predeterminado: export/)
    • Vaciar carpeta Import tras convertir — elimina los .txt originales al terminar (después de copiar a Dropbox, si está activado)
+   • Coin hands as PS — exportar CoinPoker como PokerStars (Hand2Note sin suscripción Pro/Asia)
    • Copiar a Dropbox — copia las manos sin convertir a Dropbox; muestra las carpetas Dropbox y Chico (opcional)
    • Apodo — nombre del héroe en manos GG / UP / Coin convertidas (predeterminado: Hero)
 
@@ -181,6 +187,7 @@ Konwerter historii rozdań
    • Folder Import — surowe pliki .txt historii rozdań (domyślnie: import/)
    • Folder Export — przekonwertowane pliki (domyślnie: export/)
    • Wyczyść folder Import po konwersji — usuwa źródłowe .txt po zakończeniu (po kopiowaniu do Dropbox, jeśli włączone)
+   • Coin hands as PS — eksport CoinPoker jako PokerStars (Hand2Note bez subskrypcji Pro/Asia)
    • Kopiuj do Dropbox — kopiuje surowe ręce do Dropbox; pokazuje foldery Dropbox i Chico (opcjonalnie)
    • Pseudonim — nazwa bohatera w przekonwertowanych rozdanach GG / UP / Coin (domyślnie: Hero)
 
@@ -280,6 +287,7 @@ class SettingsDialog(tk.Toplevel):
             "clear_import_after_convert": tk.BooleanVar(
                 value=base.clear_import_after_convert
             ),
+            "coin_as_ps": tk.BooleanVar(value=base.coin_as_ps),
             "dropbox_base_path": tk.StringVar(value=path_display(base.dropbox_base_path)),
             "chico_import_path": tk.StringVar(
                 value=path_display(base.chico_import_path) if base.chico_import_path else ""
@@ -299,6 +307,13 @@ class SettingsDialog(tk.Toplevel):
             text="Clear Import folder after converting",
             variable=self._vars["clear_import_after_convert"],
         ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(8, 4))
+        row += 1
+
+        ttk.Checkbutton(
+            body,
+            text="Coin hands as PokerStars (for non-PRO H2N)",
+            variable=self._vars["coin_as_ps"],
+        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
         row += 1
 
         ttk.Checkbutton(
@@ -417,6 +432,7 @@ class SettingsDialog(tk.Toplevel):
             dropbox_mode="original" if copy_to_dropbox else "none",
             player_alias=alias,
             clear_import_after_convert=self._vars["clear_import_after_convert"].get(),
+            coin_as_ps=self._vars["coin_as_ps"].get(),
         )
         try:
             save_settings(self._config_path, self._result)
@@ -432,6 +448,11 @@ class SettingsDialog(tk.Toplevel):
 
 
 class InfoDialog(tk.Toplevel):
+    _MIN_WIDTH = 480
+    _MIN_HEIGHT = 360
+    _MAX_WIDTH = 960
+    _MAX_HEIGHT = 720
+
     def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self._lang_code = "en"
@@ -444,16 +465,25 @@ class InfoDialog(tk.Toplevel):
         frame = ttk.Frame(self, padding=12)
         frame.pack(fill=tk.BOTH, expand=True)
 
+        text_frame = ttk.Frame(frame)
+        text_frame.pack(fill=tk.BOTH, expand=True)
+        text_frame.rowconfigure(0, weight=1)
+        text_frame.columnconfigure(0, weight=1)
+
         self._text = tk.Text(
-            frame,
-            wrap=tk.NONE,
+            text_frame,
+            wrap=tk.WORD,
             relief=tk.FLAT,
             padx=4,
             pady=4,
             borderwidth=0,
             highlightthickness=0,
         )
-        self._text.pack(fill=tk.BOTH, expand=True)
+        self._text.grid(row=0, column=0, sticky="nsew")
+
+        scroll_y = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=self._text.yview)
+        scroll_y.grid(row=0, column=1, sticky="ns")
+        self._text.configure(yscrollcommand=scroll_y.set)
 
         footer = ttk.Frame(frame)
         footer.pack(fill=tk.X, pady=(8, 0))
@@ -488,25 +518,33 @@ class InfoDialog(tk.Toplevel):
         self.title(_INFO_TITLE_LABELS[lang_code])
         self._close_btn.configure(text=_INFO_CLOSE_LABELS[lang_code])
         content = _INFO_TEXTS[lang_code]
-        lines = content.splitlines()
         self._text.configure(state=tk.NORMAL)
         self._text.delete("1.0", tk.END)
         self._text.insert("1.0", content)
-        self._text.configure(state=tk.DISABLED, height=max(len(lines), 1))
-        self._fit_to_content(lines)
+        self._text.configure(state=tk.DISABLED)
+        self._fit_to_content()
         self._center_over(self._parent)
 
-    def _fit_to_content(self, lines: list[str]) -> None:
+    def _fit_to_content(self) -> None:
         font = tkfont.Font(font=self._text.cget("font"))
-        max_width = max((font.measure(line) for line in lines), default=0)
         line_height = font.metrics("linespace")
-        text_width = max_width + 16
-        text_height = line_height * max(len(lines), 1) + 12
-        frame_pad = 24
-        footer_height = 40
-        width = text_width + frame_pad
-        height = text_height + frame_pad + footer_height
-        self.minsize(width, height)
+        frame_pad = 48
+        footer_height = 48
+
+        cap_w = min(int(self.winfo_screenwidth() * 0.9), self._MAX_WIDTH)
+        cap_h = min(int(self.winfo_screenheight() * 0.85), self._MAX_HEIGHT)
+        width = max(self._MIN_WIDTH, min(720, cap_w))
+
+        self.geometry(f"{width}x{self._MIN_HEIGHT}")
+        self.update_idletasks()
+        display_lines = int(self._text.index("end-1c").split(".")[0])
+        content_h = line_height * display_lines + 24
+        height = max(
+            self._MIN_HEIGHT,
+            min(content_h + frame_pad + footer_height, cap_h),
+        )
+
+        self.minsize(self._MIN_WIDTH, self._MIN_HEIGHT)
         self.geometry(f"{width}x{height}")
 
     def _center_over(self, parent: tk.Misc) -> None:

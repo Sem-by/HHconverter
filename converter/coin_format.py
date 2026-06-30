@@ -3,13 +3,21 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta, timezone
 
+COIN_H2N_TOURNAMENT_NAME = "Freeroll Hold'em No Limit"
+_COIN_H2N_HEADER_RE = re.compile(
+    r"(PokerStars Hand #\d+: Tournament #\d+, ).+?( - Level)"
+)
+
 _SHOWDOWN_RE = re.compile(r"\*\*\* SHOWDOWN \*\*\*")
 _EMPTY_DEALT_RE = re.compile(r"^Dealt to \S+\s*$")
 
 _SEAT_CHIPS_RE = re.compile(r"^(Seat \d+: \S+ \()([\d,.]+)( in chips\))$")
 _ANTE_RE = re.compile(r"^(\S+): posts ante ([\d,.]+)$")
+_ANTE_ALLIN_RE = re.compile(r"^(\S+): posts ante ([\d,.]+) ALLIN$")
 _SB_RE = re.compile(r"^(\S+): posts small blind ([\d,.]+)$")
+_SB_ALLIN_RE = re.compile(r"^(\S+): posts small blind ([\d,.]+) ALLIN$")
 _BB_RE = re.compile(r"^(\S+): posts big blind ([\d,.]+)$")
+_BB_ALLIN_RE = re.compile(r"^(\S+): posts big blind ([\d,.]+) ALLIN$")
 _RAISE_RE = re.compile(r"^(\S+): raises ([\d,.]+) to ([\d,.]+)(.*)$")
 _CALL_RE = re.compile(r"^(\S+): calls ([\d,.]+)$")
 _BET_RE = re.compile(r"^(\S+): bets ([\d,.]+)(.*)$")
@@ -24,6 +32,15 @@ _TOURNAMENT_TITLE_RE = re.compile(r"^₮[\d.]+\s+")
 _COIN_TIME_RE = re.compile(
     r"^(\d{4}/\d{2}/\d{2}) (\d{1,2}):(\d{2}):(\d{2}) \+(\d{1,2})$",
 )
+
+
+def apply_coin_h2n_header(header_line: str) -> str:
+    """Match Hand2Note Coin module headers (always ``Freeroll Hold'em No Limit``)."""
+    return _COIN_H2N_HEADER_RE.sub(
+        rf"\1{COIN_H2N_TOURNAMENT_NAME}\2",
+        header_line,
+        count=1,
+    )
 
 
 def format_stakes_int(value: float) -> str:
@@ -76,7 +93,146 @@ def coin_timestamp_to_utc(time_part: str) -> str:
     return f"{time_part} UTC"
 
 
+def _format_amount(amount: str, *, use_euro: bool) -> str:
+    if use_euro:
+        return euro_amount(amount)
+    return normalize_money(amount)
+
+
 def format_coin_body_line(line: str) -> str | None:
+    return _format_body_line(line, use_euro=True)
+
+
+def format_ps_body_line(line: str) -> str | None:
+    return _format_body_line(line, use_euro=False)
+
+
+_STREET_MARKERS = frozenset({"HOLE CARDS", "FLOP", "TURN", "RIVER", "SHOW DOWN", "SUMMARY"})
+_BETS_RE = re.compile(r"^(\S+): bets (€?)([\d,.]+)(.*)$")
+_RAISES_RE = re.compile(r"^(\S+): raises (€?)([\d,.]+) to (€?)([\d,.]+)(.*)$")
+_CALLS_RE = re.compile(r"^(\S+): calls (€?)([\d,.]+)(.*)$")
+_ACTION_LINE_RE = re.compile(r"^(\S+): ")
+
+
+def _amount_to_str(amount: float) -> str:
+    rounded = round(amount)
+    if abs(amount - rounded) < 0.005:
+        return str(int(rounded))
+    text = f"{amount:.2f}"
+    return text.rstrip("0").rstrip(".")
+
+
+def _money_token(symbol: str, amount: float) -> str:
+    value = _amount_to_str(amount)
+    return f"{symbol}{value}" if symbol else value
+
+
+def _fmt_raise(player: str, increment: float, total: float, symbol: str, suffix: str) -> str:
+    return (
+        f"{player}: raises {_money_token(symbol, increment)} to "
+        f"{_money_token(symbol, total)}{suffix}"
+    )
+
+
+def _fmt_call(player: str, amount: float, symbol: str, suffix: str) -> str:
+    return f"{player}: calls {_money_token(symbol, amount)}{suffix}"
+
+
+def normalize_coin_action_lines(lines: list[str]) -> list[str]:
+    """Fix ALLIN/bet lines so Hand2Note action stamps parse (raises/calls vs bets)."""
+    out: list[str] = []
+    street: str | None = None
+    street_level = 0.0
+    preflop_voluntary = False
+
+    for line in lines:
+        marker = re.match(r"\*\*\* (.+?) \*\*\*", line)
+        if marker:
+            name = marker.group(1)
+            if name in _STREET_MARKERS:
+                street = name
+                street_level = 0.0
+                if name != "HOLE CARDS":
+                    preflop_voluntary = False
+            out.append(line)
+            continue
+
+        if street is None or street in ("SUMMARY", "SHOW DOWN"):
+            out.append(line)
+            continue
+
+        if not _ACTION_LINE_RE.match(line):
+            out.append(line)
+            continue
+
+        is_preflop = street == "HOLE CARDS"
+
+        bets = _BETS_RE.match(line)
+        if bets:
+            player, symbol, amount_raw, tail = bets.groups()
+            amount = float(normalize_money(amount_raw))
+            suffix = " and is all-in" if "all-in" in tail else ""
+
+            if is_preflop and not preflop_voluntary:
+                line = _fmt_raise(player, amount, amount, symbol, suffix)
+                street_level = amount
+                preflop_voluntary = True
+            elif street_level > 0:
+                if amount <= street_level + 0.005:
+                    line = _fmt_call(player, amount, symbol, suffix)
+                else:
+                    line = _fmt_raise(
+                        player, amount - street_level, amount, symbol, suffix
+                    )
+                    street_level = amount
+                preflop_voluntary = preflop_voluntary or is_preflop
+            else:
+                street_level = amount
+                if is_preflop:
+                    preflop_voluntary = True
+            out.append(line)
+            continue
+
+        raises = _RAISES_RE.match(line)
+        if raises:
+            player, _inc_sym, _inc_raw, total_sym, total_raw, tail = raises.groups()
+            if "all-in" not in tail and "ALLIN" in tail:
+                line = (
+                    f"{player}: raises {raises.group(2)}{raises.group(3)} to "
+                    f"{total_sym}{total_raw} and is all-in"
+                )
+            street_level = float(normalize_money(total_raw))
+            if is_preflop:
+                preflop_voluntary = True
+            out.append(line)
+            continue
+
+        calls = _CALLS_RE.match(line)
+        if calls:
+            amount = float(normalize_money(calls.group(3)))
+            street_level = max(street_level, amount)
+            if is_preflop:
+                preflop_voluntary = True
+            out.append(line)
+            continue
+
+        if re.match(r"^\S+: (folds|checks)", line):
+            out.append(line)
+            continue
+
+        out.append(line)
+
+    return out
+
+
+def normalize_coin_hand_actions(text: str) -> str:
+    lines = text.splitlines()
+    if not lines:
+        return text
+    return "\n".join(normalize_coin_action_lines(lines))
+
+
+def _format_body_line(line: str, *, use_euro: bool) -> str | None:
     stripped = line.rstrip()
     if not stripped:
         return ""
@@ -88,23 +244,46 @@ def format_coin_body_line(line: str) -> str | None:
 
     m = _SEAT_CHIPS_RE.match(stripped)
     if m:
-        return f"{m.group(1)}{euro_amount(m.group(2))}{m.group(3)}"
+        return f"{m.group(1)}{_format_amount(m.group(2), use_euro=use_euro)}{m.group(3)}"
+
+    m = _ANTE_ALLIN_RE.match(stripped)
+    if m:
+        return (
+            f"{m.group(1)}: posts the ante "
+            f"{_format_amount(m.group(2), use_euro=use_euro)} and is all-in"
+        )
 
     m = _ANTE_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: posts the ante {euro_amount(m.group(2))}"
+        return f"{m.group(1)}: posts the ante {_format_amount(m.group(2), use_euro=use_euro)}"
+
+    m = _SB_ALLIN_RE.match(stripped)
+    if m:
+        return (
+            f"{m.group(1)}: posts small blind "
+            f"{_format_amount(m.group(2), use_euro=use_euro)} and is all-in"
+        )
 
     m = _SB_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: posts small blind {euro_amount(m.group(2))}"
+        return f"{m.group(1)}: posts small blind {_format_amount(m.group(2), use_euro=use_euro)}"
+
+    m = _BB_ALLIN_RE.match(stripped)
+    if m:
+        return (
+            f"{m.group(1)}: posts big blind "
+            f"{_format_amount(m.group(2), use_euro=use_euro)} and is all-in"
+        )
 
     m = _BB_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: posts big blind {euro_amount(m.group(2))}"
+        return f"{m.group(1)}: posts big blind {_format_amount(m.group(2), use_euro=use_euro)}"
 
     m = _ALLIN_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: bets {euro_amount(m.group(2))} and is all-in"
+        return (
+            f"{m.group(1)}: bets {_format_amount(m.group(2), use_euro=use_euro)} and is all-in"
+        )
 
     m = _RAISE_RE.match(stripped)
     if m:
@@ -112,42 +291,52 @@ def format_coin_body_line(line: str) -> str | None:
         if "all-in" not in tail and "ALLIN" in tail:
             tail = " and is all-in"
         return (
-            f"{m.group(1)}: raises {euro_amount(m.group(2))} to "
-            f"{euro_amount(m.group(3))}{tail}"
+            f"{m.group(1)}: raises {_format_amount(m.group(2), use_euro=use_euro)} to "
+            f"{_format_amount(m.group(3), use_euro=use_euro)}{tail}"
         )
 
     m = _CALL_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: calls {euro_amount(m.group(2))}"
+        return f"{m.group(1)}: calls {_format_amount(m.group(2), use_euro=use_euro)}"
 
     m = _BET_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: bets {euro_amount(m.group(2))}{m.group(3)}"
+        return f"{m.group(1)}: bets {_format_amount(m.group(2), use_euro=use_euro)}{m.group(3)}"
 
     m = _COLLECTED_RE.match(stripped)
     if m:
-        return f"{m.group(1)} collected {euro_amount(m.group(2))} from pot"
+        return (
+            f"{m.group(1)} collected {_format_amount(m.group(2), use_euro=use_euro)} from pot"
+        )
 
     m = _UNCALLED_RE.match(stripped)
     if m:
-        return f"Uncalled bet ({euro_amount(m.group(1))}) returned to {m.group(2)}"
+        return (
+            f"Uncalled bet ({_format_amount(m.group(1), use_euro=use_euro)}) "
+            f"returned to {m.group(2)}"
+        )
 
     m = _RETURN_RE.match(stripped)
     if m:
-        return f"Uncalled bet ({euro_amount(m.group(2))}) returned to {m.group(1)}"
+        return (
+            f"Uncalled bet ({_format_amount(m.group(2), use_euro=use_euro)}) "
+            f"returned to {m.group(1)}"
+        )
 
     if stripped.startswith("Total pot"):
         m = _TOTAL_POT_RE.match(stripped)
         if m:
-            return f"Total pot {euro_amount(m.group(1))} | Rake €0"
+            pot = _format_amount(m.group(1), use_euro=use_euro)
+            rake = "€0" if use_euro else "0"
+            return f"Total pot {pot} | Rake {rake}"
 
     m = _SUMMARY_WON_ONLY_RE.match(stripped)
     if m:
-        return f"{m.group(1)} collected ({euro_amount(m.group(2))})"
+        return f"{m.group(1)} collected ({_format_amount(m.group(2), use_euro=use_euro)})"
 
     if stripped.startswith("Seat ") and ("collected (" in stripped or "won (" in stripped):
         return _SUMMARY_MONEY_RE.sub(
-            lambda match: f"({euro_amount(match.group(1))})",
+            lambda match: f"({_format_amount(match.group(1), use_euro=use_euro)})",
             stripped,
         )
 
@@ -171,6 +360,7 @@ def coin_postprocess(text: str) -> str:
         if line.startswith("Board ["):
             line = normalize_coin_board_line(line)
         lines_out.append(line.rstrip())
+    lines_out = normalize_coin_action_lines(lines_out)
     text = "\n".join(lines_out)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     return text.rstrip() + "\n"

@@ -7,10 +7,15 @@ from converter.coin_format import (
     coin_postprocess,
     coin_timestamp_to_utc,
     format_coin_body_line,
+    format_ps_body_line,
     format_stakes_int,
+    normalize_coin_hand_actions,
 )
+from converter.hand_ids import HAND_PREFIX_COINPOKER, prefixed_hand_id
+from converter.normalize import global_postprocess, replace_seat_token
 from converter.player_names import COIN_PLAYER_TOKEN, PlayerNameSession
-from converter.normalize import replace_seat_token
+from converter.pp_blinds import format_blinds_piece
+from converter.pp_format import normalize_pp_header_timestamp
 from converter.settings import SOURCE_HERO_TOKEN
 
 _NUM = r"[\d,.]+"
@@ -20,6 +25,7 @@ _COIN_HAND_RE = re.compile(
 _COIN_TOURNAMENT_RE = re.compile(
     r"^Tournament\s+'(.+?)'\s+'(\d+)'\s+(\d+)-max\s+Seat\s+#(\d+)\s+is\s+the\s+button\s*$",
 )
+_N_MAX_TITLE_RE = re.compile(r"^\d+-Max\b", re.I)
 
 
 def coin_tournament_id(block: str) -> str:
@@ -36,11 +42,24 @@ def _parse_stakes_token(raw: str) -> float:
     return float(raw.replace(",", ""))
 
 
-class CoinPokerConverter:
-    """Convert CoinPoker export text into Hand2Note3 CoinPoker-module layout."""
+def coin_h2n_tournament_title(title_raw: str, max_seats: str) -> str:
+    """Hand2Note Coin datetime parsing needs ``{N}-Max …`` or ``Freeroll`` in the header title."""
+    title = clean_tournament_title(title_raw)
+    if title.lower().startswith("freeroll") or _N_MAX_TITLE_RE.match(title):
+        return title
+    return f"{max_seats}-Max {title}"
 
-    def __init__(self, hero_display_name: str) -> None:
+
+def _stakes_int(value: float) -> int:
+    return int(value) if value == int(value) else int(round(value))
+
+
+class CoinPokerConverter:
+    """Convert CoinPoker export text for Hand2Note import."""
+
+    def __init__(self, hero_display_name: str, *, coin_as_ps: bool = False) -> None:
         self._hero_display_name = hero_display_name
+        self._coin_as_ps = coin_as_ps
         self._players = PlayerNameSession(
             name_suffix="_coin",
             should_rename=self._should_rename_opponent,
@@ -59,40 +78,57 @@ class CoinPokerConverter:
         return out
 
     def convert_hand(self, block: str) -> str:
-        text = _build_hand(block)
-        text = replace_seat_token(
-            text,
-            SOURCE_HERO_TOKEN,
-            self._hero_display_name,
-        )
+        text = _build_hand(block, coin_as_ps=self._coin_as_ps)
+        hero_name = self._hero_display_name
+        if self._coin_as_ps:
+            hero_name = f"{hero_name}_coin"
+        text = replace_seat_token(text, SOURCE_HERO_TOKEN, hero_name)
+        if self._coin_as_ps:
+            text = normalize_coin_hand_actions(text)
+            return global_postprocess(text)
         return coin_postprocess(text)
 
 
-def _build_hand(block: str) -> str:
+def _parse_coin_hand(block: str):
     lines = block.splitlines()
     if len(lines) < 2:
-        return block
+        return None
 
-    first = lines[0].strip()
-    hm = _COIN_HAND_RE.match(first)
+    hm = _COIN_HAND_RE.match(lines[0].strip())
     if not hm:
-        return block
+        return None
 
-    hand_id = hm.group(1)
-    sb = _parse_stakes_token(hm.group(2))
-    bb = _parse_stakes_token(hm.group(3))
-    time_part = hm.group(5).strip()
-
-    tournament_line = lines[1].strip()
-    tm = _COIN_TOURNAMENT_RE.match(tournament_line)
+    tm = _COIN_TOURNAMENT_RE.match(lines[1].strip())
     if not tm:
+        return None
+
+    return (
+        hm.group(1),
+        _parse_stakes_token(hm.group(2)),
+        _parse_stakes_token(hm.group(3)),
+        _parse_stakes_token(hm.group(4)),
+        hm.group(5).strip(),
+        tm.group(1).strip(),
+        tm.group(2).strip(),
+        tm.group(3),
+        tm.group(4),
+        lines[2:],
+    )
+
+
+def _build_hand(block: str, *, coin_as_ps: bool) -> str:
+    if coin_as_ps:
+        return _build_hand_ps(block)
+    return _build_hand_h2n(block)
+
+
+def _build_hand_h2n(block: str) -> str:
+    parsed = _parse_coin_hand(block)
+    if parsed is None:
         return block
 
-    title = clean_tournament_title(tm.group(1).strip())
-    tid = tm.group(2).strip()
-    max_seats = tm.group(3)
-    button = tm.group(4)
-
+    hand_id, sb, bb, _ante, time_part, title_raw, tid, max_seats, button, body_lines = parsed
+    title = coin_h2n_tournament_title(title_raw, max_seats)
     sb_s = format_stakes_int(sb)
     bb_s = format_stakes_int(bb)
     utc_time = coin_timestamp_to_utc(time_part)
@@ -103,10 +139,36 @@ def _build_hand(block: str) -> str:
     )
     table_line = f"Table 'CPR_{tid} 0' {max_seats}-max Seat #{button} is the button"
 
-    body_lines: list[str] = []
-    for line in lines[2:]:
+    out_body: list[str] = []
+    for line in body_lines:
         formatted = format_coin_body_line(line)
         if formatted is not None:
-            body_lines.append(formatted)
+            out_body.append(formatted)
 
-    return "\n".join([header, table_line, *body_lines])
+    return "\n".join([header, table_line, *out_body])
+
+
+def _build_hand_ps(block: str) -> str:
+    parsed = _parse_coin_hand(block)
+    if parsed is None:
+        return block
+
+    hand_id, sb, bb, ante, time_part, title_raw, tid, max_seats, button, body_lines = parsed
+    hid = prefixed_hand_id(HAND_PREFIX_COINPOKER, hand_id)
+    utc_time = coin_timestamp_to_utc(time_part)
+    level_piece = format_blinds_piece(_stakes_int(sb), _stakes_int(bb), _stakes_int(ante))
+    tail = (
+        f"Tournament #{tid}, {title_raw} Hold'em No Limit "
+        f"- Level I {level_piece} - {utc_time}"
+    )
+    tail = normalize_pp_header_timestamp(tail)
+    header = f"PokerStars Hand #{hid}: {tail}"
+    table_line = f"Table '{tid} 1' {max_seats}-max Seat #{button} is the button"
+
+    out_body: list[str] = []
+    for line in body_lines:
+        formatted = format_ps_body_line(line)
+        if formatted is not None:
+            out_body.append(formatted)
+
+    return "\n".join([header, table_line, *out_body])

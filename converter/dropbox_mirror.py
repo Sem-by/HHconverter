@@ -6,14 +6,11 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
+from converter.coin_format import apply_coin_h2n_header
 from converter.export_names import TournamentMeta
 from converter.settings import Settings
 
 _FILENAME_DATE_RE = re.compile(r"(\d{4})[_\-.](\d{1,2})[_\-.](\d{1,2})")
-_COIN_DROPBOX_HEADER_RE = re.compile(
-    r"(PokerStars Hand #\d+: Tournament #\d+, ).+?( - Level)"
-)
-_COIN_DROPBOX_TOURNAMENT_NAME = "Freeroll Hold'em No Limit"
 
 
 def coin_dropbox_filename(played_on: date) -> str:
@@ -24,11 +21,7 @@ def coin_dropbox_hand_text(hand: str) -> str:
     lines = hand.splitlines()
     if not lines:
         return hand
-    lines[0] = _COIN_DROPBOX_HEADER_RE.sub(
-        rf"\1{_COIN_DROPBOX_TOURNAMENT_NAME}\2",
-        lines[0],
-        count=1,
-    )
+    lines[0] = apply_coin_h2n_header(lines[0])
     return "\n".join(lines)
 
 
@@ -110,7 +103,7 @@ def _coin_dropbox_dest_dir(cfg: Settings, played_on: date) -> Path:
         cfg.dropbox_base_path
         / "CoinPoker"
         / str(played_on.year)
-        / f"{played_on.month:02d}"
+        / str(played_on.month)
     )
 
 
@@ -120,7 +113,7 @@ def _chico_dest(cfg: Settings, src: Path) -> tuple[Path, str]:
         return cfg.dropbox_base_path / "Chico" / "Misc", src.name
 
     year = m.group(1)
-    month = m.group(2).zfill(2)
+    month = str(int(m.group(2)))
     return cfg.dropbox_base_path / "Chico" / year / month, src.name
 
 
