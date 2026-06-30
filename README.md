@@ -58,7 +58,7 @@ Copy `config.example.json` to `config.json`:
 |------|----------------|-------|
 | PokerPlanets | `PokerPlanets Hand #` | PokerStars-style export |
 | GGPokerOK | `Poker Hand #TM5730…` | Numeric TM ids |
-| UPoker | `Poker Hand #TM0…` | Hex TM ids |
+| UPpoker | `Poker Hand #TM0…` | Hex TM ids |
 | CoinPoker | `CoinPoker Hand #` | H2N Coin module format |
 
 Chico files are copied as-is when `chico_import_path` is set (not converted).
