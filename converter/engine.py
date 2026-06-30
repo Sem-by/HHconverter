@@ -142,7 +142,10 @@ def _convert_import_file(
         grouped_raw[("uppoker", "")].extend(up_blocks)
 
     if coin_by_tid:
-        coin_converter = CoinPokerConverter(cfg.player_alias)
+        coin_converter = CoinPokerConverter(
+            cfg.player_alias,
+            coin_as_ps=cfg.coin_as_ps,
+        )
         for tid, blocks in coin_by_tid.items():
             grouped_converted[("coinpoker", tid)].extend(
                 coin_converter.convert_file_blocks(blocks)
@@ -163,10 +166,16 @@ def _convert_import_file(
 
         if cfg.dropbox_mode == "original":
             if room == "coinpoker":
+                dropbox_bodies = converted_bodies
+                if cfg.coin_as_ps:
+                    dropbox_bodies = CoinPokerConverter(
+                        cfg.player_alias,
+                        coin_as_ps=False,
+                    ).convert_file_blocks(raw_bodies)
                 add_coin_dropbox_hands(
                     coin_dropbox_buffers,
                     meta.played_on,
-                    converted_bodies,
+                    dropbox_bodies,
                 )
             else:
                 original_payload = "\n\n".join(raw_bodies).rstrip() + "\n"

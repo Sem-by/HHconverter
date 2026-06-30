@@ -1,6 +1,6 @@
 [project]
 name = "converter"
-version = "0.1.0"
+version = "0.2.0"
 description = "Convert multi-room tournament hand histories to PokerStars-style text for Hand2Note"
 requires-python = ">=3.11"
 dependencies = [

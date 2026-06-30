@@ -76,7 +76,22 @@ def coin_timestamp_to_utc(time_part: str) -> str:
     return f"{time_part} UTC"
 
 
+def _format_amount(amount: str, *, use_euro: bool) -> str:
+    normalized = normalize_money(amount)
+    if use_euro:
+        return euro_amount(amount)
+    return normalized
+
+
 def format_coin_body_line(line: str) -> str | None:
+    return _format_body_line(line, use_euro=True)
+
+
+def format_ps_body_line(line: str) -> str | None:
+    return _format_body_line(line, use_euro=False)
+
+
+def _format_body_line(line: str, *, use_euro: bool) -> str | None:
     stripped = line.rstrip()
     if not stripped:
         return ""
@@ -88,23 +103,25 @@ def format_coin_body_line(line: str) -> str | None:
 
     m = _SEAT_CHIPS_RE.match(stripped)
     if m:
-        return f"{m.group(1)}{euro_amount(m.group(2))}{m.group(3)}"
+        return f"{m.group(1)}{_format_amount(m.group(2), use_euro=use_euro)}{m.group(3)}"
 
     m = _ANTE_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: posts the ante {euro_amount(m.group(2))}"
+        return f"{m.group(1)}: posts the ante {_format_amount(m.group(2), use_euro=use_euro)}"
 
     m = _SB_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: posts small blind {euro_amount(m.group(2))}"
+        return f"{m.group(1)}: posts small blind {_format_amount(m.group(2), use_euro=use_euro)}"
 
     m = _BB_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: posts big blind {euro_amount(m.group(2))}"
+        return f"{m.group(1)}: posts big blind {_format_amount(m.group(2), use_euro=use_euro)}"
 
     m = _ALLIN_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: bets {euro_amount(m.group(2))} and is all-in"
+        return (
+            f"{m.group(1)}: bets {_format_amount(m.group(2), use_euro=use_euro)} and is all-in"
+        )
 
     m = _RAISE_RE.match(stripped)
     if m:
@@ -112,42 +129,52 @@ def format_coin_body_line(line: str) -> str | None:
         if "all-in" not in tail and "ALLIN" in tail:
             tail = " and is all-in"
         return (
-            f"{m.group(1)}: raises {euro_amount(m.group(2))} to "
-            f"{euro_amount(m.group(3))}{tail}"
+            f"{m.group(1)}: raises {_format_amount(m.group(2), use_euro=use_euro)} to "
+            f"{_format_amount(m.group(3), use_euro=use_euro)}{tail}"
         )
 
     m = _CALL_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: calls {euro_amount(m.group(2))}"
+        return f"{m.group(1)}: calls {_format_amount(m.group(2), use_euro=use_euro)}"
 
     m = _BET_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: bets {euro_amount(m.group(2))}{m.group(3)}"
+        return f"{m.group(1)}: bets {_format_amount(m.group(2), use_euro=use_euro)}{m.group(3)}"
 
     m = _COLLECTED_RE.match(stripped)
     if m:
-        return f"{m.group(1)} collected {euro_amount(m.group(2))} from pot"
+        return (
+            f"{m.group(1)} collected {_format_amount(m.group(2), use_euro=use_euro)} from pot"
+        )
 
     m = _UNCALLED_RE.match(stripped)
     if m:
-        return f"Uncalled bet ({euro_amount(m.group(1))}) returned to {m.group(2)}"
+        return (
+            f"Uncalled bet ({_format_amount(m.group(1), use_euro=use_euro)}) "
+            f"returned to {m.group(2)}"
+        )
 
     m = _RETURN_RE.match(stripped)
     if m:
-        return f"Uncalled bet ({euro_amount(m.group(2))}) returned to {m.group(1)}"
+        return (
+            f"Uncalled bet ({_format_amount(m.group(2), use_euro=use_euro)}) "
+            f"returned to {m.group(1)}"
+        )
 
     if stripped.startswith("Total pot"):
         m = _TOTAL_POT_RE.match(stripped)
         if m:
-            return f"Total pot {euro_amount(m.group(1))} | Rake €0"
+            pot = _format_amount(m.group(1), use_euro=use_euro)
+            rake = "€0" if use_euro else "0"
+            return f"Total pot {pot} | Rake {rake}"
 
     m = _SUMMARY_WON_ONLY_RE.match(stripped)
     if m:
-        return f"{m.group(1)} collected ({euro_amount(m.group(2))})"
+        return f"{m.group(1)} collected ({_format_amount(m.group(2), use_euro=use_euro)})"
 
     if stripped.startswith("Seat ") and ("collected (" in stripped or "won (" in stripped):
         return _SUMMARY_MONEY_RE.sub(
-            lambda match: f"({euro_amount(match.group(1))})",
+            lambda match: f"({_format_amount(match.group(1), use_euro=use_euro)})",
             stripped,
         )
 

@@ -8,5 +8,7 @@
 
   "clear_import_after_convert": false,
 
+  "coin_as_ps": true,
+
   "player_alias": "Hero"
 }

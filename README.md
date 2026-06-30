@@ -1,17 +1,19 @@
 # HHConverter
 
-Convert tournament hand histories from multiple poker rooms into **PokerStars-style** text for **Hand2Note 3**.
+Convert tournament hand histories from multiple poker rooms into **PokerStars-style** text for **Hand2Note 3** import.
 
-Supports **PokerPlanets**, **GGPokerOK**, **UPPoker**, and **CoinPoker**, with optional Dropbox backup and **Chico** hands copy.
+Supports **PokerPlanets**, **GGPokerOK**, **UPPoker**, and **CoinPoker**, with optional Dropbox mirroring and Chico copy.
 
 ## Features
 
 - GUI (`HHConverter.exe` or `python -m converter.gui`) and CLI (`python -m converter`)
 - Per-room conversion to Hand2Note-compatible PokerStars format
-- CoinPoker output matches the legacy Hand2Note Coin module layout (€, `CPR_` tables, UTC, Freeroll header on Dropbox copies)
+- **Coin hands as PS** — basic PokerStars export for Hand2Note (no Coin Pro / `CPR_` tables required)
+- Legacy Coin Pro layout still available (€, `CPR_` tables, Freeroll on Dropbox) when **Coin hands as PS** is off
 - Hand ID namespacing per room to avoid collisions in one database
-- Optional Dropbox backup (raw PP/GG/UP, daily merged Coin files, Chico unchanged)
+- Optional Dropbox mirror (raw PP/GG/UP, daily merged Coin files, Chico unchanged)
 - Optional clear Import folder after convert
+- Instructions in 7 languages (EN, RU, UK, KK, FR, ES, PL)
 
 ## Requirements
 
@@ -50,18 +52,35 @@ Copy `config.example.json` to `config.json`:
 | `dropbox_mode` | `"original"` or `"none"` |
 | `chico_import_path` | Chico `.txt` folder to copy unchanged (or `null`) |
 | `clear_import_after_convert` | Delete `*.txt` under Import after a successful run |
+| `coin_as_ps` | Export Coin as basic PokerStars format (default **true**). Uncheck for legacy H2N Coin Pro layout |
 | `player_alias` | Hero nickname in GG / UP / Coin output |
 
 ## Supported rooms
 
-| Room | Input header | Notes |
-|------|----------------|-------|
-| PokerPlanets | `PokerPlanets Hand #` | PokerStars-style export |
+| Room | Input header | Export notes |
+|------|----------------|--------------|
+| PokerPlanets | `PokerPlanets Hand #` | PokerStars-style |
 | GGPokerOK | `Poker Hand #TM5730…` | Numeric TM ids |
 | UPoker | `Poker Hand #TM0…` | Hex TM ids |
-| CoinPoker | `CoinPoker Hand #` | H2N Coin module format |
+| CoinPoker | `CoinPoker Hand #` | PS-style when `coin_as_ps` is on; legacy Coin module layout when off |
 
 Chico files are copied as-is when `chico_import_path` is set (not converted).
+
+## Build standalone Windows app
+
+```powershell
+.\build.ps1
+```
+
+Output: `dist\HHConverter\HHConverter.exe` (keep `_internal` beside the exe).
+
+## Hand ID namespacing
+
+- PokerPlanets: `111111` + original id
+- GGPoker: `205730…` (from `TM5730…`)
+- UPoker: `205872…` band
+- Coin (PS mode): `333333` + original id
+- Coin (legacy mode): original Coin ids
 
 ## Disclaimer
 

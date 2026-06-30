@@ -55,6 +55,7 @@ Hand History Converter
    • Import folder — raw hand history .txt files (default: import/)
    • Export folder — converted output (default: export/)
    • Clear Import folder after converting — removes source .txt files when done (after Dropbox copy, if enabled)
+   • Coin hands as PS — export CoinPoker as basic PokerStars format (for Hand2Note without Coin Pro); Dropbox still uses legacy Coin layout when enabled
    • Copy to Dropbox — mirrors raw hands to Dropbox; shows Dropbox and optional Chico folders
    • Nickname — hero name in converted GG / UP / Coin hands (default: Hero)
 
@@ -280,6 +281,7 @@ class SettingsDialog(tk.Toplevel):
             "clear_import_after_convert": tk.BooleanVar(
                 value=base.clear_import_after_convert
             ),
+            "coin_as_ps": tk.BooleanVar(value=base.coin_as_ps),
             "dropbox_base_path": tk.StringVar(value=path_display(base.dropbox_base_path)),
             "chico_import_path": tk.StringVar(
                 value=path_display(base.chico_import_path) if base.chico_import_path else ""
@@ -299,6 +301,13 @@ class SettingsDialog(tk.Toplevel):
             text="Clear Import folder after converting",
             variable=self._vars["clear_import_after_convert"],
         ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(8, 4))
+        row += 1
+
+        ttk.Checkbutton(
+            body,
+            text="Coin hands as PS",
+            variable=self._vars["coin_as_ps"],
+        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
         row += 1
 
         ttk.Checkbutton(
@@ -417,6 +426,7 @@ class SettingsDialog(tk.Toplevel):
             dropbox_mode="original" if copy_to_dropbox else "none",
             player_alias=alias,
             clear_import_after_convert=self._vars["clear_import_after_convert"].get(),
+            coin_as_ps=self._vars["coin_as_ps"].get(),
         )
         try:
             save_settings(self._config_path, self._result)

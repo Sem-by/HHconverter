@@ -21,6 +21,7 @@ class Settings:
 
     player_alias: str
     clear_import_after_convert: bool
+    coin_as_ps: bool
 
 
 def program_base() -> Path:
@@ -54,6 +55,7 @@ def default_settings() -> Settings:
         dropbox_mode="none",
         player_alias="Hero",
         clear_import_after_convert=False,
+        coin_as_ps=True,
     )
 
 
@@ -97,6 +99,7 @@ def load_settings(config_path: Path) -> Settings:
         dropbox_mode=dropbox_mode,  # type: ignore[arg-type]
         player_alias=str(data["player_alias"]),
         clear_import_after_convert=bool(data.get("clear_import_after_convert", False)),
+        coin_as_ps=bool(data.get("coin_as_ps", True)),
     )
 
 
@@ -119,6 +122,7 @@ def save_settings(config_path: Path, settings: Settings) -> None:
     data["dropbox_mode"] = settings.dropbox_mode
     data["player_alias"] = settings.player_alias
     data["clear_import_after_convert"] = settings.clear_import_after_convert
+    data["coin_as_ps"] = settings.coin_as_ps
     data.pop("room_seat_tokens", None)
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
