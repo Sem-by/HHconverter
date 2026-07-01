@@ -7,6 +7,19 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 _UTC_ZONE = timezone.utc
 
+# CoinPoker and other exports sometimes use abbreviations instead of ``+03`` / ``UTC``.
+_TZ_ABBREVS: dict[str, str] = {
+    "MSK": "Europe/Moscow",
+    "UTC": "UTC",
+    "GMT": "UTC",
+    "CET": "Europe/Berlin",
+    "CEST": "Europe/Berlin",
+    "EET": "Europe/Kyiv",
+    "EEST": "Europe/Kyiv",
+}
+
+_DATETIME_RE = r"(\d{4}[/-]\d{2}[/-]\d{2} \d{2}:\d{2}:\d{2})"
+
 
 def int_to_roman(n: int) -> str | None:
     """Roman numerals for typical tournament blinds levels (bounded)."""
@@ -37,11 +50,15 @@ def strip_trailing_timestamp_token(line: str) -> str:
     if utc_m:
         return trimmed[: utc_m.start()]
 
-    tz_m = re.search(r"\s+(\d{4}[/-]\d{2}[/-]\d{2} \d{2}:\d{2}:\d{2})\s+\+(\d{1,2})$", trimmed)
+    tz_m = re.search(rf"\s+{_DATETIME_RE}\s+\+(\d{{1,2}})$", trimmed)
     if tz_m:
         return trimmed[: tz_m.start()]
 
-    plain_m = re.search(r"\s+(\d{4}[/-]\d{2}[/-]\d{2} \d{2}:\d{2}:\d{2})\s*$", trimmed)
+    named_m = re.search(rf"\s+{_DATETIME_RE}\s+([A-Za-z]{{2,6}})\b", trimmed)
+    if named_m and named_m.group(2).upper() in _TZ_ABBREVS:
+        return trimmed[: named_m.start()]
+
+    plain_m = re.search(rf"\s+{_DATETIME_RE}\s*$", trimmed)
     if plain_m:
         return trimmed[: plain_m.start()]
 
@@ -102,14 +119,25 @@ def parse_header_timestamp(line: str) -> datetime | None:
         fmt = "%Y/%m/%d %H:%M:%S" if "/" in utc_m.group(1) else "%Y-%m-%d %H:%M:%S"
         return datetime.strptime(utc_m.group(1), fmt).replace(tzinfo=_UTC_ZONE)
 
-    tz_m = re.search(r"(\d{4}[/-]\d{2}[/-]\d{2} \d{2}:\d{2}:\d{2})\s+\+(\d{1,2})$", cleaned)
+    tz_m = re.search(rf"{_DATETIME_RE}\s+\+(\d{{1,2}})$", cleaned)
     if tz_m:
         fmt = "%Y/%m/%d %H:%M:%S" if "/" in tz_m.group(1) else "%Y-%m-%d %H:%M:%S"
         raw = tz_m.group(1)
         local_dt = datetime.strptime(raw, fmt).replace(tzinfo=timezone(timedelta(hours=int(tz_m.group(2)))))
         return local_dt.astimezone(_UTC_ZONE)
 
-    iso_m = re.search(r"(\d{4}[/-]\d{2}[/-]\d{2} \d{2}:\d{2}:\d{2})\s*$", cleaned)
+    named_m = re.search(rf"{_DATETIME_RE}\s+([A-Za-z]{{2,6}})\b", cleaned, flags=re.I)
+    if named_m:
+        zone_name = _TZ_ABBREVS.get(named_m.group(2).upper())
+        if zone_name:
+            fmt = "%Y/%m/%d %H:%M:%S" if "/" in named_m.group(1) else "%Y-%m-%d %H:%M:%S"
+            naive = datetime.strptime(named_m.group(1), fmt)
+            try:
+                return naive.replace(tzinfo=ZoneInfo(zone_name)).astimezone(_UTC_ZONE)
+            except ZoneInfoNotFoundError:
+                return None
+
+    iso_m = re.search(rf"{_DATETIME_RE}\s*$", cleaned)
     if iso_m:
         fmt = "%Y/%m/%d %H:%M:%S" if "/" in iso_m.group(1) else "%Y-%m-%d %H:%M:%S"
         raw = iso_m.group(1)

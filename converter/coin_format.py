@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
+
+from converter.time_et import parse_header_timestamp
 
 COIN_H2N_TOURNAMENT_NAME = "Freeroll Hold'em No Limit"
 _COIN_H2N_HEADER_RE = re.compile(
@@ -29,9 +31,6 @@ _TOTAL_POT_RE = re.compile(r"^Total pot ([\d,.]+)")
 _SUMMARY_WON_ONLY_RE = re.compile(r"^(Seat \d+: \S+(?: \([^)]+\))?) won \(([\d,.]+)\)\s*$")
 _SUMMARY_MONEY_RE = re.compile(r"\(([\d,.]+)\)")
 _TOURNAMENT_TITLE_RE = re.compile(r"^₮[\d.]+\s+")
-_COIN_TIME_RE = re.compile(
-    r"^(\d{4}/\d{2}/\d{2}) (\d{1,2}):(\d{2}):(\d{2}) \+(\d{1,2})$",
-)
 
 
 def apply_coin_h2n_header(header_line: str) -> str:
@@ -79,15 +78,9 @@ def format_h2n_utc_datetime(dt: datetime) -> str:
 
 def coin_timestamp_to_utc(time_part: str) -> str:
     time_part = time_part.strip()
-    m = _COIN_TIME_RE.match(time_part)
-    if m:
-        date_s, hour, minute, second, offset_h = m.groups()
-        dt = datetime.strptime(
-            f"{date_s} {int(hour):02d}:{minute}:{second}",
-            "%Y/%m/%d %H:%M:%S",
-        ).replace(tzinfo=timezone(timedelta(hours=int(offset_h))))
-        utc = dt.astimezone(timezone.utc)
-        return format_h2n_utc_datetime(utc)
+    parsed = parse_header_timestamp(time_part)
+    if parsed is not None:
+        return format_h2n_utc_datetime(parsed)
     if time_part.upper().endswith("UTC"):
         return time_part
     return f"{time_part} UTC"
