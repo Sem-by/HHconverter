@@ -4,14 +4,10 @@ import re
 
 from converter.hand_ids import HAND_PREFIX_POKER_PLANETS, prefixed_hand_id
 from converter.pp_blinds import extract_blinds_from_hand, patch_header_blinds
-from converter.pp_format import normalize_pp_header_timestamp, normalize_pp_table_line
+from converter.pp_format import normalize_pp_header_timestamp, normalize_pp_table_line, parse_pp_tournament_header_with_buyin
 from converter.player_names import PP_PLAYER_TOKEN, PlayerNameSession
 
 _PP_HEADER_RE = re.compile(r"PokerPlanets\s+Hand\s+#(\d+)\s*:\s*(.+)")
-_PP_TOURNAMENT_RE = re.compile(
-    r"^Tournament\s+\(([^)]+)\)#(\d+),\s*(\$\S+)\s*(.+)$",
-)
-
 
 class PokerPlanetsConverter:
     def __init__(self) -> None:
@@ -42,10 +38,10 @@ class PokerPlanetsConverter:
         hid = prefixed_hand_id(HAND_PREFIX_POKER_PLANETS, m.group(1))
         tail = m.group(2).strip()
 
-        tm = _PP_TOURNAMENT_RE.match(tail)
+        tm = parse_pp_tournament_header_with_buyin(tail)
         if tm:
-            name, tid, buyin, rest = tm.group(1), tm.group(2), tm.group(3), tm.group(4)
-            tail = f"Tournament #{tid}, {name} {buyin} {rest}"
+            name, tid, buyin, rest = tm
+            tail = f"Tournament #{tid}, {name} {buyin} {rest}".rstrip()
 
         blinds = extract_blinds_from_hand(block)
         if blinds:

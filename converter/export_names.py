@@ -7,6 +7,7 @@ from datetime import date
 from converter.coin_convert import coin_tournament_id
 from converter.coin_format import clean_tournament_title
 from converter.hand_ids import up_display_tournament_id
+from converter.pp_format import parse_pp_tournament_header
 from converter.time_et import parse_header_timestamp, strip_existing_et_brackets
 
 _ROOM_ABBREV = {
@@ -17,10 +18,6 @@ _ROOM_ABBREV = {
 }
 
 _PP_HEADER_RE = re.compile(r"PokerPlanets\s+Hand\s+#\d+\s*:\s*(.+)", re.I)
-_PP_TOURNAMENT_RE = re.compile(
-    r"^Tournament\s+\(([^)]+)\)#(\d+),\s*(.+)$",
-    re.I,
-)
 _GG_HEADER_RE = re.compile(r"Poker\s+Hand\s+#\S+\s*:\s*(.+)", re.I)
 _GG_TOURNAMENT_RE = re.compile(
     r"^Tournament\s+#(\d+),\s*(.+?)\s+Hold'em\b",
@@ -78,11 +75,11 @@ def _pp_meta(header: str) -> TournamentMeta:
         raise ValueError(f"Unrecognized PokerPlanets header: {header!r}")
 
     tail = m.group(1).strip()
-    tm = _PP_TOURNAMENT_RE.match(tail)
+    tm = parse_pp_tournament_header(tail)
     if not tm:
         raise ValueError(f"Unrecognized PokerPlanets tournament header: {tail!r}")
 
-    name, tid, rest = tm.group(1).strip(), tm.group(2), tm.group(3)
+    name, tid, rest = tm[0].strip(), tm[1], tm[2]
     price = _extract_usd_price(rest) or ""
     played = _header_date(rest)
     return TournamentMeta("poker_planets", tid, price, name, played)
