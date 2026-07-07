@@ -2,26 +2,30 @@ from __future__ import annotations
 
 import re
 
-_SB_RE = re.compile(r"^(.+?): posts small blind (\d+)\s*$", re.MULTILINE)
-_BB_RE = re.compile(r"^(.+?): posts big blind (\d+)\s*$", re.MULTILINE)
-_ANTE_RE = re.compile(r"^(.+?): posts (?:the )?ante (\d+)\s*$", re.MULTILINE)
+_POST_SUFFIX = r"(?:\s+and is all-in)?\s*$"
+_SB_RE = re.compile(rf"^(.+?): posts small blind (\d+){_POST_SUFFIX}", re.MULTILINE)
+_BB_RE = re.compile(rf"^(.+?): posts big blind (\d+){_POST_SUFFIX}", re.MULTILINE)
+_ANTE_RE = re.compile(rf"^(.+?): posts (?:the )?ante (\d+){_POST_SUFFIX}", re.MULTILINE)
 _LEVEL_BLINDS_RE = re.compile(r"(- Level .+? )\([^)]+\)")
 
 
 def extract_blinds_from_hand(text: str) -> tuple[int, int, int | None] | None:
-    """Read SB/BB/ante from posting lines in the hand body."""
-    sb_m = _SB_RE.search(text)
-    bb_m = _BB_RE.search(text)
-    if not sb_m or not bb_m:
+    """Read SB/BB/ante from posting lines; infer full level when a blind is short all-in."""
+    sb_posts = [int(m.group(2)) for m in _SB_RE.finditer(text)]
+    bb_posts = [int(m.group(2)) for m in _BB_RE.finditer(text)]
+    if not bb_posts:
         return None
 
-    sb = int(sb_m.group(2))
-    bb = int(bb_m.group(2))
+    sb = max(sb_posts) if sb_posts else 0
+    bb = max(bb_posts)
 
-    ante: int | None = None
-    ante_m = _ANTE_RE.search(text)
-    if ante_m:
-        ante = int(ante_m.group(2))
+    if sb == 0 and bb > 0:
+        sb = bb // 2
+    elif sb > 0 and bb < sb * 2:
+        bb = sb * 2
+
+    ante_posts = [int(m.group(2)) for m in _ANTE_RE.finditer(text)]
+    ante = max(ante_posts) if ante_posts else None
 
     return sb, bb, ante
 

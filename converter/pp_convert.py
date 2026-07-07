@@ -4,6 +4,7 @@ import re
 
 from converter.hand_ids import HAND_PREFIX_POKER_PLANETS, prefixed_hand_id
 from converter.pp_blinds import extract_blinds_from_hand, patch_header_blinds
+from converter.pp_body import normalize_pp_body_lines
 from converter.pp_format import normalize_pp_header_timestamp, normalize_pp_table_line, parse_pp_tournament_header_with_buyin
 from converter.player_names import PP_PLAYER_TOKEN, PlayerNameSession
 
@@ -43,7 +44,10 @@ class PokerPlanetsConverter:
             name, tid, buyin, rest = tm
             tail = f"Tournament #{tid}, {name} {buyin} {rest}".rstrip()
 
-        blinds = extract_blinds_from_hand(block)
+        body_lines = normalize_pp_body_lines(lines[1:])
+        body_text = "\n".join(body_lines)
+
+        blinds = extract_blinds_from_hand(body_text)
         if blinds:
             sb, bb, ante = blinds
             tail = patch_header_blinds(tail, sb, bb, ante)
@@ -53,7 +57,7 @@ class PokerPlanetsConverter:
         header = f"PokerStars Hand #{hid}: {tail}"
 
         out_lines = [header]
-        for idx, line in enumerate(lines[1:], start=1):
+        for idx, line in enumerate(body_lines, start=1):
             if idx == 1 and line.strip().startswith("Table "):
                 out_lines.append(normalize_pp_table_line(line))
             else:
