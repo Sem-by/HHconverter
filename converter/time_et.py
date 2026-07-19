@@ -18,7 +18,8 @@ _TZ_ABBREVS: dict[str, str] = {
     "EEST": "Europe/Kyiv",
 }
 
-_DATETIME_RE = r"(\d{4}[/-]\d{2}[/-]\d{2} \d{2}:\d{2}:\d{2})"
+# Hour may be unpadded (PokerPlanets / PokerStars: ``2026/07/15 8:05:38``).
+_DATETIME_RE = r"(\d{4}[/-]\d{2}[/-]\d{2} \d{1,2}:\d{2}:\d{2})"
 
 
 def int_to_roman(n: int) -> str | None:
@@ -46,7 +47,7 @@ def strip_existing_et_brackets(line: str) -> str:
 def strip_trailing_timestamp_token(line: str) -> str:
     trimmed = strip_existing_et_brackets(line.rstrip())
 
-    utc_m = re.search(r"\s+(\d{4}[/-]\d{2}[/-]\d{2} \d{2}:\d{2}:\d{2})\s+UTC\b", trimmed, flags=re.I)
+    utc_m = re.search(rf"\s+{_DATETIME_RE}\s+UTC\b", trimmed, flags=re.I)
     if utc_m:
         return trimmed[: utc_m.start()]
 
@@ -111,27 +112,30 @@ def append_utc_bracket_et(header_line: str) -> tuple[str | None, str]:
     return None, f"{prefix} {utc_piece} {et_piece}"
 
 
+def _strptime_header_dt(raw: str) -> datetime:
+    fmt = "%Y/%m/%d %H:%M:%S" if "/" in raw else "%Y-%m-%d %H:%M:%S"
+    return datetime.strptime(raw, fmt)
+
+
 def parse_header_timestamp(line: str) -> datetime | None:
     cleaned = strip_existing_et_brackets(line).rstrip()
 
-    utc_m = re.search(r"(\d{4}[/-]\d{2}[/-]\d{2} \d{2}:\d{2}:\d{2})\s+UTC\b", cleaned, flags=re.I)
+    utc_m = re.search(rf"{_DATETIME_RE}\s+UTC\b", cleaned, flags=re.I)
     if utc_m:
-        fmt = "%Y/%m/%d %H:%M:%S" if "/" in utc_m.group(1) else "%Y-%m-%d %H:%M:%S"
-        return datetime.strptime(utc_m.group(1), fmt).replace(tzinfo=_UTC_ZONE)
+        return _strptime_header_dt(utc_m.group(1)).replace(tzinfo=_UTC_ZONE)
 
     tz_m = re.search(rf"{_DATETIME_RE}\s+\+(\d{{1,2}})$", cleaned)
     if tz_m:
-        fmt = "%Y/%m/%d %H:%M:%S" if "/" in tz_m.group(1) else "%Y-%m-%d %H:%M:%S"
-        raw = tz_m.group(1)
-        local_dt = datetime.strptime(raw, fmt).replace(tzinfo=timezone(timedelta(hours=int(tz_m.group(2)))))
+        local_dt = _strptime_header_dt(tz_m.group(1)).replace(
+            tzinfo=timezone(timedelta(hours=int(tz_m.group(2))))
+        )
         return local_dt.astimezone(_UTC_ZONE)
 
     named_m = re.search(rf"{_DATETIME_RE}\s+([A-Za-z]{{2,6}})\b", cleaned, flags=re.I)
     if named_m:
         zone_name = _TZ_ABBREVS.get(named_m.group(2).upper())
         if zone_name:
-            fmt = "%Y/%m/%d %H:%M:%S" if "/" in named_m.group(1) else "%Y-%m-%d %H:%M:%S"
-            naive = datetime.strptime(named_m.group(1), fmt)
+            naive = _strptime_header_dt(named_m.group(1))
             try:
                 return naive.replace(tzinfo=ZoneInfo(zone_name)).astimezone(_UTC_ZONE)
             except ZoneInfoNotFoundError:
@@ -139,8 +143,6 @@ def parse_header_timestamp(line: str) -> datetime | None:
 
     iso_m = re.search(rf"{_DATETIME_RE}\s*$", cleaned)
     if iso_m:
-        fmt = "%Y/%m/%d %H:%M:%S" if "/" in iso_m.group(1) else "%Y-%m-%d %H:%M:%S"
-        raw = iso_m.group(1)
-        return datetime.strptime(raw, fmt).replace(tzinfo=_UTC_ZONE)
+        return _strptime_header_dt(iso_m.group(1)).replace(tzinfo=_UTC_ZONE)
 
     return None
