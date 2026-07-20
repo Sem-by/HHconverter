@@ -80,7 +80,7 @@ class CoinPokerConverter:
     def convert_hand(self, block: str) -> str:
         text = _build_hand(block, coin_as_ps=self._coin_as_ps)
         hero_name = self._hero_display_name
-        if self._coin_as_ps:
+        if not hero_name.endswith("_coin"):
             hero_name = f"{hero_name}_coin"
         text = replace_seat_token(text, SOURCE_HERO_TOKEN, hero_name)
         if self._coin_as_ps:
