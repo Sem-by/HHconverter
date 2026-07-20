@@ -727,7 +727,7 @@ class ConverterApp:
             messagebox.showerror("Convert", error, parent=self.root)
             return
 
-        self._set_convert_label("Done!")
+        self._set_convert_label("Done! Again?")
         if self._settings:
             self._status.configure(text=self._status_text(self._settings))
 
