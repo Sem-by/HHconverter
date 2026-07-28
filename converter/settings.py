@@ -23,6 +23,11 @@ class Settings:
     clear_import_after_convert: bool
     coin_as_ps: bool
 
+    import_from_folders: bool
+    poker_planets_folder: Path | None
+    downloads_folder: Path | None
+    clear_folders_after_import: bool
+
 
 def program_base() -> Path:
     if getattr(sys, "frozen", False):
@@ -56,16 +61,22 @@ def default_settings() -> Settings:
         player_alias="Hero",
         clear_import_after_convert=False,
         coin_as_ps=False,
+        import_from_folders=False,
+        poker_planets_folder=None,
+        downloads_folder=None,
+        clear_folders_after_import=False,
     )
 
 
-def is_path_set(path: Path) -> bool:
+def is_path_set(path: Path | None) -> bool:
+    if path is None:
+        return False
     text = str(path).strip().replace("\\", "/")
     return bool(text) and text not in {".", ""}
 
 
-def path_display(path: Path) -> str:
-    if not is_path_set(path):
+def path_display(path: Path | None) -> str:
+    if path is None or not is_path_set(path):
         return ""
     return _path_str(path)
 
@@ -91,6 +102,11 @@ def load_settings(config_path: Path) -> Settings:
             f"Invalid dropbox_mode {dropbox_mode!r}; expected one of: original, none"
         )
 
+    import_from_folders = bool(data.get("import_from_folders", False))
+    clear_folders = bool(data.get("clear_folders_after_import", False))
+    if dropbox_mode != "original":
+        clear_folders = False
+
     return Settings(
         import_path=_path_from_config(data["import_path"]),
         export_path=_path_from_config(data["export_path"]),
@@ -100,6 +116,10 @@ def load_settings(config_path: Path) -> Settings:
         player_alias=str(data["player_alias"]),
         clear_import_after_convert=bool(data.get("clear_import_after_convert", False)),
         coin_as_ps=bool(data.get("coin_as_ps", False)),
+        import_from_folders=import_from_folders,
+        poker_planets_folder=_optional_path(data.get("poker_planets_folder")),
+        downloads_folder=_optional_path(data.get("downloads_folder")),
+        clear_folders_after_import=clear_folders,
     )
 
 
@@ -123,12 +143,26 @@ def save_settings(config_path: Path, settings: Settings) -> None:
     data["player_alias"] = settings.player_alias
     data["clear_import_after_convert"] = settings.clear_import_after_convert
     data["coin_as_ps"] = settings.coin_as_ps
+    data["import_from_folders"] = settings.import_from_folders
+    data["poker_planets_folder"] = (
+        _path_str(settings.poker_planets_folder) if settings.poker_planets_folder else None
+    )
+    data["downloads_folder"] = (
+        _path_str(settings.downloads_folder) if settings.downloads_folder else None
+    )
+    data["clear_folders_after_import"] = settings.clear_folders_after_import
     data.pop("room_seat_tokens", None)
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
     with config_path.open("w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2)
         fh.write("\n")
+
+
+def _optional_path(value: Any) -> Path | None:
+    if value is None or value == "":
+        return None
+    return _path_from_config(value)
 
 
 def _path_from_config(value: Any) -> Path:

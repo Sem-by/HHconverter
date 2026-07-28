@@ -22,8 +22,8 @@ _TABLE_LINE_RE = re.compile(
 )
 
 
-class UPokerConverter:
-    """Convert UPoker text to Hand2Note Upoker-module layout (Coin-like, not GG-like)."""
+class UPpokerConverter:
+    """Convert UPpoker text to Hand2Note UPpoker-module layout (Coin-like, not GG-like)."""
 
     def convert_file_blocks(self, blocks: list[str]) -> list[str]:
         return [self.convert_hand(block) for block in blocks]
@@ -111,3 +111,7 @@ def _normalize_won_to_collected(line: str) -> str:
     if "showed" in line and " with " in line:
         return line
     return re.sub(r"\bwon \(", "collected (", line)
+
+
+# Backward-compatible alias
+UPokerConverter = UPpokerConverter

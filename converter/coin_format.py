@@ -13,24 +13,28 @@ _COIN_H2N_HEADER_RE = re.compile(
 _SHOWDOWN_RE = re.compile(r"\*\*\* SHOWDOWN \*\*\*")
 _EMPTY_DEALT_RE = re.compile(r"^Dealt to \S+\s*$")
 
-_SEAT_CHIPS_RE = re.compile(r"^(Seat \d+: \S+ \()([\d,.]+)( in chips\))$")
-_ANTE_RE = re.compile(r"^(\S+): posts ante ([\d,.]+)$")
-_ANTE_ALLIN_RE = re.compile(r"^(\S+): posts ante ([\d,.]+) ALLIN$")
-_SB_RE = re.compile(r"^(\S+): posts small blind ([\d,.]+)$")
-_SB_ALLIN_RE = re.compile(r"^(\S+): posts small blind ([\d,.]+) ALLIN$")
-_BB_RE = re.compile(r"^(\S+): posts big blind ([\d,.]+)$")
-_BB_ALLIN_RE = re.compile(r"^(\S+): posts big blind ([\d,.]+) ALLIN$")
-_RAISE_RE = re.compile(r"^(\S+): raises ([\d,.]+) to ([\d,.]+)(.*)$")
-_CALL_RE = re.compile(r"^(\S+): calls ([\d,.]+)$")
-_BET_RE = re.compile(r"^(\S+): bets ([\d,.]+)(.*)$")
-_ALLIN_RE = re.compile(r"^(\S+): ALLIN ([\d,.]+)$")
-_COLLECTED_RE = re.compile(r"^(\S+) collected ([\d,.]+) from pot$")
-_UNCALLED_RE = re.compile(r"^Uncalled bet \(([\d,.]+)\) returned to (\S+)$")
-_RETURN_RE = re.compile(r"^(\S+): RETURN ([\d,.]+)$")
-_TOTAL_POT_RE = re.compile(r"^Total pot ([\d,.]+)")
-_SUMMARY_WON_ONLY_RE = re.compile(r"^(Seat \d+: \S+(?: \([^)]+\))?) won \(([\d,.]+)\)\s*$")
-_SUMMARY_MONEY_RE = re.compile(r"\(([\d,.]+)\)")
+_MONEY = r"[₮$€]?([\d,.]+)"
+_SEAT_CHIPS_RE = re.compile(rf"^(Seat \d+: \S+ \(){_MONEY}( in chips\))$")
+_ANTE_RE = re.compile(rf"^(\S+): posts ante {_MONEY}$")
+_ANTE_ALLIN_RE = re.compile(rf"^(\S+): posts ante {_MONEY} ALLIN$")
+_SB_RE = re.compile(rf"^(\S+): posts small blind {_MONEY}$")
+_SB_ALLIN_RE = re.compile(rf"^(\S+): posts small blind {_MONEY} ALLIN$")
+_BB_RE = re.compile(rf"^(\S+): posts big blind {_MONEY}$")
+_BB_ALLIN_RE = re.compile(rf"^(\S+): posts big blind {_MONEY} ALLIN$")
+_RAISE_RE = re.compile(rf"^(\S+): raises {_MONEY} to {_MONEY}(.*)$")
+_CALL_RE = re.compile(rf"^(\S+): calls {_MONEY}$")
+_BET_RE = re.compile(rf"^(\S+): bets {_MONEY}(.*)$")
+_ALLIN_RE = re.compile(rf"^(\S+): ALLIN {_MONEY}$")
+_COLLECTED_RE = re.compile(rf"^(\S+) collected {_MONEY} from pot$")
+_UNCALLED_RE = re.compile(rf"^Uncalled bet \({_MONEY}\) returned to (\S+)$")
+_RETURN_RE = re.compile(rf"^(\S+): RETURN {_MONEY}$")
+_TOTAL_POT_RE = re.compile(rf"^Total pot {_MONEY}")
+_SUMMARY_WON_ONLY_RE = re.compile(
+    rf"^(Seat \d+: \S+(?: \([^)]+\))?) won \({_MONEY}\)\s*$"
+)
+_SUMMARY_MONEY_RE = re.compile(rf"\({_MONEY}\)")
 _TOURNAMENT_TITLE_RE = re.compile(r"^₮[\d.]+\s+")
+_CURRENCY_PREFIX_RE = re.compile(r"[₮$€]")
 
 
 def apply_coin_h2n_header(header_line: str) -> str:
@@ -63,6 +67,10 @@ def euro_amount(amount: str) -> str:
     return f"€{normalize_money(amount)}"
 
 
+def dollar_amount(amount: str) -> str:
+    return f"${normalize_money(amount)}"
+
+
 def clean_tournament_title(title: str) -> str:
     title = title.strip()
     return _TOURNAMENT_TITLE_RE.sub("", title) or title
@@ -86,25 +94,49 @@ def coin_timestamp_to_utc(time_part: str) -> str:
     return f"{time_part} UTC"
 
 
-def _format_amount(amount: str, *, use_euro: bool) -> str:
-    if use_euro:
-        return euro_amount(amount)
-    return normalize_money(amount)
+def _format_amount(amount: str, *, currency: str) -> str:
+    cleaned = normalize_money(_CURRENCY_PREFIX_RE.sub("", amount))
+    if currency == "€":
+        return euro_amount(cleaned)
+    if currency == "$":
+        return dollar_amount(cleaned)
+    return cleaned
 
 
 def format_coin_body_line(line: str) -> str | None:
-    return _format_body_line(line, use_euro=True)
+    return _format_body_line(line, currency="€")
 
 
 def format_ps_body_line(line: str) -> str | None:
-    return _format_body_line(line, use_euro=False)
+    return _format_body_line(line, currency="")
+
+
+def format_cash_body_line(line: str) -> str | None:
+    """Cash games: CoinPoker ₮ amounts become ``$``."""
+    return _format_body_line(line, currency="$")
 
 
 _STREET_MARKERS = frozenset({"HOLE CARDS", "FLOP", "TURN", "RIVER", "SHOW DOWN", "SUMMARY"})
-_BETS_RE = re.compile(r"^(\S+): bets (€?)([\d,.]+)(.*)$")
-_RAISES_RE = re.compile(r"^(\S+): raises (€?)([\d,.]+) to (€?)([\d,.]+)(.*)$")
-_CALLS_RE = re.compile(r"^(\S+): calls (€?)([\d,.]+)(.*)$")
+_STREET_MARKER_RE = re.compile(
+    r"^(?:FIRST|SECOND)\s+(FLOP|TURN|RIVER|SHOW\s*DOWN|SHOWDOWN)$"
+    r"|^(HOLE CARDS|FLOP|TURN|RIVER|SHOW\s*DOWN|SHOWDOWN|SUMMARY)$",
+    re.I,
+)
+_BETS_RE = re.compile(r"^(\S+): bets ([€$]?)([\d,.]+)(.*)$")
+_RAISES_RE = re.compile(r"^(\S+): raises ([€$]?)([\d,.]+) to ([€$]?)([\d,.]+)(.*)$")
+_CALLS_RE = re.compile(r"^(\S+): calls ([€$]?)([\d,.]+)(.*)$")
 _ACTION_LINE_RE = re.compile(r"^(\S+): ")
+
+
+def _street_from_marker(name: str) -> str | None:
+    """Map ``FLOP`` / ``FIRST FLOP`` / ``SECOND RIVER`` / … to a street key."""
+    m = _STREET_MARKER_RE.match(name.strip())
+    if not m:
+        return None
+    core = (m.group(1) or m.group(2) or "").upper().replace("  ", " ")
+    if core in {"SHOW DOWN", "SHOWDOWN"}:
+        return "SHOW DOWN"
+    return core
 
 
 def _amount_to_str(amount: float) -> str:
@@ -141,8 +173,8 @@ def normalize_coin_action_lines(lines: list[str]) -> list[str]:
     for line in lines:
         marker = re.match(r"\*\*\* (.+?) \*\*\*", line)
         if marker:
-            name = marker.group(1)
-            if name in _STREET_MARKERS:
+            name = _street_from_marker(marker.group(1))
+            if name is not None:
                 street = name
                 street_level = 0.0
                 if name != "HOLE CARDS":
@@ -225,7 +257,7 @@ def normalize_coin_hand_actions(text: str) -> str:
     return "\n".join(normalize_coin_action_lines(lines))
 
 
-def _format_body_line(line: str, *, use_euro: bool) -> str | None:
+def _format_body_line(line: str, *, currency: str) -> str | None:
     stripped = line.rstrip()
     if not stripped:
         return ""
@@ -237,45 +269,45 @@ def _format_body_line(line: str, *, use_euro: bool) -> str | None:
 
     m = _SEAT_CHIPS_RE.match(stripped)
     if m:
-        return f"{m.group(1)}{_format_amount(m.group(2), use_euro=use_euro)}{m.group(3)}"
+        return f"{m.group(1)}{_format_amount(m.group(2), currency=currency)}{m.group(3)}"
 
     m = _ANTE_ALLIN_RE.match(stripped)
     if m:
         return (
             f"{m.group(1)}: posts the ante "
-            f"{_format_amount(m.group(2), use_euro=use_euro)} and is all-in"
+            f"{_format_amount(m.group(2), currency=currency)} and is all-in"
         )
 
     m = _ANTE_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: posts the ante {_format_amount(m.group(2), use_euro=use_euro)}"
+        return f"{m.group(1)}: posts the ante {_format_amount(m.group(2), currency=currency)}"
 
     m = _SB_ALLIN_RE.match(stripped)
     if m:
         return (
             f"{m.group(1)}: posts small blind "
-            f"{_format_amount(m.group(2), use_euro=use_euro)} and is all-in"
+            f"{_format_amount(m.group(2), currency=currency)} and is all-in"
         )
 
     m = _SB_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: posts small blind {_format_amount(m.group(2), use_euro=use_euro)}"
+        return f"{m.group(1)}: posts small blind {_format_amount(m.group(2), currency=currency)}"
 
     m = _BB_ALLIN_RE.match(stripped)
     if m:
         return (
             f"{m.group(1)}: posts big blind "
-            f"{_format_amount(m.group(2), use_euro=use_euro)} and is all-in"
+            f"{_format_amount(m.group(2), currency=currency)} and is all-in"
         )
 
     m = _BB_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: posts big blind {_format_amount(m.group(2), use_euro=use_euro)}"
+        return f"{m.group(1)}: posts big blind {_format_amount(m.group(2), currency=currency)}"
 
     m = _ALLIN_RE.match(stripped)
     if m:
         return (
-            f"{m.group(1)}: bets {_format_amount(m.group(2), use_euro=use_euro)} and is all-in"
+            f"{m.group(1)}: bets {_format_amount(m.group(2), currency=currency)} and is all-in"
         )
 
     m = _RAISE_RE.match(stripped)
@@ -284,54 +316,63 @@ def _format_body_line(line: str, *, use_euro: bool) -> str | None:
         if "all-in" not in tail and "ALLIN" in tail:
             tail = " and is all-in"
         return (
-            f"{m.group(1)}: raises {_format_amount(m.group(2), use_euro=use_euro)} to "
-            f"{_format_amount(m.group(3), use_euro=use_euro)}{tail}"
+            f"{m.group(1)}: raises {_format_amount(m.group(2), currency=currency)} to "
+            f"{_format_amount(m.group(3), currency=currency)}{tail}"
         )
 
     m = _CALL_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: calls {_format_amount(m.group(2), use_euro=use_euro)}"
+        return f"{m.group(1)}: calls {_format_amount(m.group(2), currency=currency)}"
 
     m = _BET_RE.match(stripped)
     if m:
-        return f"{m.group(1)}: bets {_format_amount(m.group(2), use_euro=use_euro)}{m.group(3)}"
+        return f"{m.group(1)}: bets {_format_amount(m.group(2), currency=currency)}{m.group(3)}"
 
     m = _COLLECTED_RE.match(stripped)
     if m:
         return (
-            f"{m.group(1)} collected {_format_amount(m.group(2), use_euro=use_euro)} from pot"
+            f"{m.group(1)} collected {_format_amount(m.group(2), currency=currency)} from pot"
         )
 
     m = _UNCALLED_RE.match(stripped)
     if m:
         return (
-            f"Uncalled bet ({_format_amount(m.group(1), use_euro=use_euro)}) "
+            f"Uncalled bet ({_format_amount(m.group(1), currency=currency)}) "
             f"returned to {m.group(2)}"
         )
 
     m = _RETURN_RE.match(stripped)
     if m:
         return (
-            f"Uncalled bet ({_format_amount(m.group(2), use_euro=use_euro)}) "
+            f"Uncalled bet ({_format_amount(m.group(2), currency=currency)}) "
             f"returned to {m.group(1)}"
         )
 
     if stripped.startswith("Total pot"):
         m = _TOTAL_POT_RE.match(stripped)
         if m:
-            pot = _format_amount(m.group(1), use_euro=use_euro)
-            rake = "€0" if use_euro else "0"
+            pot = _format_amount(m.group(1), currency=currency)
+            if currency == "€":
+                rake = "€0"
+            elif currency == "$":
+                rake = "$0"
+            else:
+                rake = "0"
             return f"Total pot {pot} | Rake {rake}"
 
     m = _SUMMARY_WON_ONLY_RE.match(stripped)
     if m:
-        return f"{m.group(1)} collected ({_format_amount(m.group(2), use_euro=use_euro)})"
+        return f"{m.group(1)} collected ({_format_amount(m.group(2), currency=currency)})"
 
     if stripped.startswith("Seat ") and ("collected (" in stripped or "won (" in stripped):
         return _SUMMARY_MONEY_RE.sub(
-            lambda match: f"({_format_amount(match.group(1), use_euro=use_euro)})",
+            lambda match: f"({_format_amount(match.group(1), currency=currency)})",
             stripped,
         )
+
+    # Remaining money tokens (₮ from cash exports).
+    if "₮" in stripped:
+        stripped = stripped.replace("₮", currency if currency else "")
 
     return stripped
 

@@ -10,5 +10,10 @@
 
   "coin_as_ps": false,
 
+  "import_from_folders": false,
+  "poker_planets_folder": null,
+  "downloads_folder": null,
+  "clear_folders_after_import": false,
+
   "player_alias": "Hero"
 }

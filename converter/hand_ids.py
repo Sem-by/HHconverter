@@ -15,7 +15,7 @@ def poker_hand_suffix(raw_hand_id: str) -> str:
 
 
 def detect_poker_hand_room(raw_hand_id: str) -> str:
-    """GGPoker uses numeric ``TM5730…`` ids; UPoker uses hex ``TM0ED72…`` ids."""
+    """GGPoker uses numeric ``TM5730…`` ids; UPpoker uses hex ``TM0ED72…`` ids."""
     suffix = poker_hand_suffix(raw_hand_id)
     if suffix.isdigit():
         return "ggpoker_ok"
@@ -44,7 +44,7 @@ _UP_HAND_ID_BASE = 205_872_000_000
 
 
 def up_display_hand_id(raw_hand_id: str) -> str:
-    """Map UPoker hex ids to 12-digit PokerStars-style ids (parallel to GG 205730…)."""
+    """Map UPpoker hex ids to 12-digit PokerStars-style ids (parallel to GG 205730…)."""
     suffix = poker_hand_suffix(raw_hand_id)
     head = suffix[:_UP_HAND_HEX_LEN]
     try:

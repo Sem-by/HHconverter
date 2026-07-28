@@ -4,8 +4,8 @@ import re
 from dataclasses import dataclass
 from datetime import date
 
-from converter.coin_convert import coin_tournament_id
-from converter.coin_format import clean_tournament_title
+from converter.coin_convert import coin_tournament_id, is_coin_cash_hand
+from converter.coin_format import clean_tournament_title, format_stakes_int, normalize_money
 from converter.hand_ids import up_display_tournament_id
 from converter.pp_format import parse_pp_tournament_header
 from converter.time_et import parse_header_timestamp, strip_existing_et_brackets
@@ -25,6 +25,14 @@ _GG_TOURNAMENT_RE = re.compile(
 )
 _COIN_TITLE_RE = re.compile(r"^Tournament\s+'([^']+)'\s+'(\d+)'", re.I | re.M)
 _COIN_PRICE_RE = re.compile(r"^(₮[\d.]+)")
+_COIN_CASH_STAKES_RE = re.compile(
+    r"\(\s*([^\d\s/)]*[\d,.]+)\s*/\s*([^\d\s/)]*[\d,.]+)\s*\)",
+    re.I,
+)
+_COIN_LEGACY_TITLE_RE = re.compile(
+    r"CoinPoker\s+Hand\s+#\d+\s*:\s*Tournament\s+#\d+,\s*(.+?)\s+Hold'em No Limit\b",
+    re.I,
+)
 _USD_PRICE_RE = re.compile(r"\$[\d.]+(?:\+\$[\d.]+)?")
 _INVALID_FILENAME_CHARS_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
@@ -121,15 +129,28 @@ def _up_meta(header: str) -> TournamentMeta:
 
 
 def _coin_meta(block: str) -> TournamentMeta:
-    tid = coin_tournament_id(block)
-    title_m = _COIN_TITLE_RE.search(block)
-    raw_title = title_m.group(1) if title_m else ""
-    price_m = _COIN_PRICE_RE.match(raw_title.strip())
-    price = price_m.group(1) if price_m else ""
-    name = clean_tournament_title(raw_title) if raw_title else tid
-
     header = block.splitlines()[0].strip()
     played = _header_date(header)
+
+    if is_coin_cash_hand(block):
+        stakes = _COIN_CASH_STAKES_RE.search(header)
+        if not stakes:
+            raise ValueError(f"Unrecognized CoinPoker cash stakes: {header!r}")
+        sb = format_stakes_int(float(normalize_money(re.sub(r"[^\d,.]+", "", stakes.group(1)))))
+        bb = format_stakes_int(float(normalize_money(re.sub(r"[^\d,.]+", "", stakes.group(2)))))
+        price = f"${sb}-${bb}"
+        return TournamentMeta("coinpoker", f"cash-{sb}-{bb}", price, "Cash", played)
+
+    tid = coin_tournament_id(block)
+    title_m = _COIN_TITLE_RE.search(block)
+    if title_m:
+        raw_title = title_m.group(1)
+    else:
+        legacy = _COIN_LEGACY_TITLE_RE.match(header)
+        raw_title = legacy.group(1).strip() if legacy else ""
+    price_m = _COIN_PRICE_RE.match(raw_title.strip()) if raw_title else None
+    price = price_m.group(1) if price_m else ""
+    name = clean_tournament_title(raw_title) if raw_title else tid
     return TournamentMeta("coinpoker", tid, price, name, played)
 
 

@@ -4,9 +4,13 @@ import sys
 import threading
 import tkinter as tk
 import tkinter.font as tkfont
+import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from PIL import Image, ImageTk
+
+from converter import __version__
 from converter.engine import process_all
 from converter.settings import (
     Settings,
@@ -52,155 +56,169 @@ _INFO_TEXTS: dict[str, str] = {
 Hand History Converter
 
 1. Open Settings (gear icon) to configure:
-   • Import folder — raw hand history .txt files (default: import/)
+   • Import folder — raw hand history .txt / .zip files (default: import/)
    • Export folder — converted output (default: export/)
-   • Clear Import folder after converting — removes source .txt files when done (after Dropbox copy, if enabled)
+   • Clear Import folder after converting — removes source .txt/.zip files when done (after Dropbox copy, if enabled)
    • Coin hands as PS - export CoinPoker as PokerStars (for Hand2Note without Pro/Asia subscription)
    • Copy to Dropbox — mirrors raw hands to Dropbox; shows Dropbox and optional Chico folders
+   • Import from folders — also watch PokerPlanets and Downloads folders for new files only
+   • Clear folders after import — with "Copy to Dropbox" on, delete only processed files from watched folders after copy (never deletes Chico originals, unprocessed or pre–first-run Downloads files)
    • Nickname — hero name in converted GG / UP / Coin hands (default: Hero)
 
-2. Put .txt hand histories in the Import folder. Rooms: PokerPlanets, GGPokerOK, UPoker, CoinPoker.
+2. Put .txt hand histories (or GG/UP .zip archives) in the Import folder. Rooms: PokerPlanets, GGPokerOK, UPpoker, CoinPoker (tournaments + cash).
 
 3. Click Convert.
    • Converted files are written to Export.
-   • With Copy to Dropbox: PP / GG / UP raw files and Coin converted files go to Dropbox.
-   • Chico .txt files copy unchanged (if set).
-   • With Clear Import: all .txt files under Import are deleted last.
+   • .zip hand histories are unpacked and converted; with Copy to Dropbox, tournament summaries from separate zips go to Dropbox …/year/summaries.
+   • With Copy to Dropbox: PP / GG / UP raw files go to Dropbox.
+   • Chico .txt files copy unchanged to Dropbox (if set); originals in the Chico folder are kept.
+   • Import from folders: only new files since the last run are processed. Downloads files older than the app's first-run date are ignored to avoid duplicates already in the Hand2Note database. Import those via the Import folder manually if needed.
+   • If you don't want your cash hands to get into the Dropbox do not use H2N3's auto import!
 
-Import, Export, and Dropbox folder (when Copy to Dropbox is on) must be set before converting.
-You will be prompted to open Settings if any are missing.
 """,
     "ru": """\
 Конвертер истории раздач
 
 1. Откройте Настройки (иконка шестерёнки) для настройки:
-   • Папка Import — исходные .txt файлы истории раздач (по умолчанию: import/)
+   • Папка Import — исходные .txt / .zip файлы истории раздач (по умолчанию: import/)
    • Папка Export — сконвертированные файлы (по умолчанию: export/)
-   • Очистить папку Import после конвертации — удаляет исходные .txt после завершения (после копирования в Dropbox, если включено)
+   • Очистить папку Import после конвертации — удаляет исходные .txt/.zip после завершения (после копирования в Dropbox, если включено)
    • Coin hands as PS — экспорт CoinPoker в формате PokerStars (для Hand2Note без подписки Pro/Asia)
    • Копировать в Dropbox — копирует исходные файлы в Dropbox; открывает поля Dropbox и Chico (необязательно)
+   • Импорт из папок — также следит за папками PokerPlanets и Downloads (только новые файлы)
+   • Очистить папки после импорта — при включённом Dropbox удаляет только обработанные файлы из доп. папок (не удаляет оригиналы Chico, необработанные и файлы Downloads старше даты первого запуска)
    • Никнейм — имя героя в конвертированных раздачах GG / UP / Coin (по умолчанию: Hero)
 
-2. Положите .txt файлы истории раздач в папку Import. Румы: PokerPlanets, GGPokerOK, UPoker, CoinPoker.
+2. Положите .txt (или .zip GG/UP) в папку Import. Румы: PokerPlanets, GGPokerOK, UPpoker, CoinPoker (турниры и кэш).
 
 3. Нажмите Convert.
    • Сконвертированные файлы сохраняются в Export.
-   • При включённом копировании в Dropbox: исходные файлы PP / GG / UP и сконвертированные Coin копируются в Dropbox.
-   • Файлы Chico копируются без изменений (если указана папка).
-   • При включённой очистке Import: все .txt в папке Import удаляются в конце.
+   • Архивы .zip с раздачами распаковываются; при копировании в Dropbox саммари из отдельных zip попадают в …/year/summaries.
+   • При копировании в Dropbox: исходные PP / GG / UP копируются в Dropbox.
+   • Файлы Chico копируются в Dropbox без изменений (если указана папка); оригиналы в папке Chico не удаляются.
+   • Импорт из папок обрабатывает только новые файлы с прошлого запуска. Файлы в Downloads старше даты первого запуска приложения игнорируются, чтобы не дублировать раздачи уже в базе Hand2Note. При необходимости импортируйте их вручную через папку Import.
+   • Если не хотите, чтобы кэш-раздачи попадали в Dropbox, не используйте автоимпорт H2N3!
 
-Перед конвертацией должны быть указаны папки Import, Export и Dropbox (если включено копирование в Dropbox).
-При отсутствии любой из них откроется окно Настроек.
 """,
     "uk": """\
 Конвертер історії роздач
 
 1. Відкрийте Налаштування (іконка шестерні) для налаштування:
-   • Папка Import — вихідні .txt файли історії роздач (за замовчуванням: import/)
+   • Папка Import — вихідні .txt / .zip файли історії роздач (за замовчуванням: import/)
    • Папка Export — сконвертовані файли (за замовчуванням: export/)
-   • Очистити папку Import після конвертації — видаляє вихідні .txt після завершення (після копіювання в Dropbox, якщо увімкнено)
+   • Очистити папку Import після конвертації — видаляє вихідні .txt/.zip після завершення (після копіювання в Dropbox, якщо увімкнено)
    • Coin hands as PS — експорт CoinPoker у форматі PokerStars (для Hand2Note без підписки Pro/Asia)
    • Копіювати в Dropbox — копіює вихідні файли в Dropbox; показує поля Dropbox і Chico (необов'язково)
+   • Імпорт з папок — також стежить за папками PokerPlanets і Downloads (лише нові файли)
+   • Очистити папки після імпорту — з увімкненим Dropbox видаляє лише оброблені файли з додаткових папок (не видаляє оригінали Chico, необроблені та файли Downloads старші за дату першого запуску)
    • Нікнейм — ім'я героя в сконвертованих роздачах GG / UP / Coin (за замовчуванням: Hero)
 
-2. Покладіть .txt файли історії роздач у папку Import. Руми: PokerPlanets, GGPokerOK, UPoker, CoinPoker.
+2. Покладіть .txt (або .zip GG/UP) у папку Import. Руми: PokerPlanets, GGPokerOK, UPpoker, CoinPoker (турніри та кеш).
 
 3. Натисніть Convert.
    • Сконвертовані файли зберігаються в Export.
-   • Якщо увімкнено копіювання в Dropbox: вихідні PP / GG / UP і сконвертовані Coin копіюються в Dropbox.
-   • Файли Chico копіюються без змін (якщо вказано папку).
-   • Якщо увімкнено очищення Import: усі .txt у папці Import видаляються наприкінці.
+   • Архіви .zip з роздачами розпаковуються; з Copy to Dropbox самарі з окремих zip потрапляють у …/year/summaries.
+   • Якщо увімкнено копіювання в Dropbox: вихідні PP / GG / UP копіюються в Dropbox.
+   • Файли Chico копіюються в Dropbox без змін (якщо вказано папку); оригінали в папці Chico не видаляються.
+   • Імпорт з папок обробляє лише нові файли з попереднього запуску. Файли в Downloads старші за дату першого запуску програми ігноруються, щоб уникнути дублікатів уже в базі Hand2Note. За потреби імпортуйте їх вручну через папку Import.
+   • Якщо не хочете, щоб кеш-роздачі потрапляли в Dropbox, не використовуйте автоімпорт H2N3!
 
-Перед конвертацією мають бути вказані папки Import, Export і Dropbox (якщо увімкнено копіювання в Dropbox).
-Якщо якоїсь немає, відкриється вікно Налаштувань.
 """,
     "kk": """\
 Раздаға тарихы конвертері
 
-1. Баптау үшін Параметрлерді (бісікелей белгіше) ашыңыз:
-   • Import қалтасы — бастапқы .txt раздаға тарихы файлдары (әдепкі: import/)
+1. Баптау үшін Параметрлерді (тісті белгіше) ашыңыз:
+   • Import қалтасы — бастапқы .txt / .zip раздаға тарихы файлдары (әдепкі: import/)
    • Export қалтасы — түрлендірілген шығыс (әдепкі: export/)
-   • Түрлендіргеннен кейін Import қалтасын тазарту — аяқталғаннан кейін бастапқы .txt файлдарын жояды (қосулы болса, Dropbox көшіруінен кейін)
-   • Coin hands as PS — CoinPoker-ді PokerStars форматында экспорттау (Hand2Note Pro/Asia жазылымысыз)
-   • Dropbox-қа көшіру — бастапқы файлдарды Dropbox-қа көшіреді; Dropbox және Chico қалталарын көрсетеді (міндетті емес)
+   • Түрлендіргеннен кейін Import қалтасын тазарту — аяқталғаннан кейін бастапқы .txt/.zip файлдарын жояды (Dropbox көшіруінен кейін, егер қосулы болса)
+   • Coin hands as PS — CoinPoker-ді PokerStars форматында экспорттау (Pro/Asia жазылымы жоқ Hand2Note үшін)
+   • Dropbox-қа көшіру — бастапқы файлдарды Dropbox-қа көшіреді; Dropbox және Chico өрістерін көрсетеді
+   • Қалталардан импорт — PokerPlanets және Downloads қалталарын қадағалайды (тек жаңа файлдар)
+   • Импорттан кейін қалталарды тазарту — Dropbox қосулы болса, тек өңделген файлдарды қосымша қалталардан жояды (Chico түпнұсқаларын, өңделмеген және бірінші іске қосу күнінен бұрынғы Downloads файлдарын жоймайды)
    • Лақап аты — түрлендірілген GG / UP / Coin раздачаларындағы кейіпкер аты (әдепкі: Hero)
 
-2. Import қалтасына .txt раздаға тарихы файлдарын салыңыз. Үйлер: PokerPlanets, GGPokerOK, UPoker, CoinPoker.
+2. Import қалтасына .txt (немесе GG/UP .zip) салыңыз. Үйлер: PokerPlanets, GGPokerOK, UPpoker, CoinPoker (турнирлер + кэш).
 
 3. Convert түймесін басыңыз.
    • Түрлендірілген файлдар Export-қа жазылады.
-   • Dropbox-қа көшіру қосулы болса: PP / GG / UP бастапқы файлдары және Coin түрлендірілген файлдары Dropbox-қа түседі.
-   • Chico .txt файлдары өзгеріссіз көшіріледі (орнатылған болса).
-   • Import-ты тазарту қосулы болса: Import-тегі барлық .txt файлдары соңында жойылады.
+   • .zip раздачалар шығарылады; Dropbox-қа көшіру қосулы болса summary zip-тер …/year/summaries-қа түседі.
+   • Dropbox-қа көшіру қосулы болса: PP / GG / UP бастапқы файлдары көшіріледі.
+   • Chico .txt файлдары Dropbox-қа өзгеріссіз көшіріледі (егер орнатылса); Chico қалтасындағы түпнұсқалар сақталады.
+   • Қалталардан импорт тек соңғы іске қосудан бергі жаңа файлдарды өңдейді. Downloads-тағы қолданбаның бірінші іске қосу күнінен бұрынғы файлдар елемейді (Hand2Note дерекқорындағы қайталауларды болдырмау үшін). Қажет болса, оларды Import қалтасы арқылы қолмен импорттаңыз.
+   • Кэш раздачалардың Dropbox-қа түсуін қаламасаңыз, H2N3 автоимпортын пайдаланбаңыз!
 
-Түрлендірмес бұрын Import, Export және Dropbox қалталары (Dropbox-қа көшіру қосулы болса) орнатылуы керек.
-Егер біреуі жоқ болса, Параметрлер терезесі ашылады.
 """,
     "fr": """\
 Convertisseur d'historiques de mains
 
 1. Ouvrez Paramètres (icône engrenage) pour configurer :
-   • Dossier Import — fichiers .txt d'historiques bruts (par défaut : import/)
+   • Dossier Import — fichiers .txt / .zip d'historiques bruts (par défaut : import/)
    • Dossier Export — fichiers convertis (par défaut : export/)
-   • Vider le dossier Import après conversion — supprime les .txt sources une fois terminé (après la copie Dropbox, si activé)
-   • Coin hands as PS — export CoinPoker en PokerStars (Hand2Note sans abonnement Pro/Asia)
-   • Copier vers Dropbox — copie les mains brutes vers Dropbox ; affiche les dossiers Dropbox et Chico (facultatif)
+   • Vider le dossier Import après conversion — supprime les .txt/.zip sources une fois terminé (après copie Dropbox, si activée)
+   • Coin hands as PS — export CoinPoker en PokerStars (pour Hand2Note sans abonnement Pro/Asia)
+   • Copier vers Dropbox — copie les mains brutes vers Dropbox ; affiche les dossiers Dropbox et Chico (optionnel)
+   • Importer depuis des dossiers — surveille aussi PokerPlanets et Downloads (nouveaux fichiers seulement)
+   • Vider les dossiers après import — avec Dropbox, supprime uniquement les fichiers traités des dossiers surveillés (ne supprime jamais les originaux Chico, ni les fichiers Downloads non traités / antérieurs à la date de première exécution)
    • Pseudo — nom du héros dans les mains GG / UP / Coin converties (par défaut : Hero)
 
-2. Placez les fichiers .txt d'historiques dans le dossier Import. Salles : PokerPlanets, GGPokerOK, UPoker, CoinPoker.
+2. Placez les fichiers .txt (ou .zip GG/UP) dans Import. Salles : PokerPlanets, GGPokerOK, UPpoker, CoinPoker (tournois + cash).
 
 3. Cliquez sur Convert.
    • Les fichiers convertis sont écrits dans Export.
-   • Avec Copier vers Dropbox : les fichiers bruts PP / GG / UP et les fichiers Coin convertis vont dans Dropbox.
-   • Les fichiers Chico .txt sont copiés sans modification (si défini).
-   • Avec Vider Import : tous les .txt du dossier Import sont supprimés en dernier.
+   • Les .zip de mains sont décompressés ; avec Dropbox, les résumés vont dans …/year/summaries.
+   • Avec Copier vers Dropbox : les fichiers bruts PP / GG / UP vont dans Dropbox.
+   • Les .txt Chico sont copiés vers Dropbox tels quels (si défini) ; les originaux du dossier Chico sont conservés.
+   • Import depuis dossiers : seuls les nouveaux fichiers depuis la dernière exécution sont traités. Les fichiers Downloads antérieurs à la date de première exécution de l'appli sont ignorés pour éviter les doublons déjà dans Hand2Note. Importez-les via Import manuellement si besoin.
+   • Si vous ne voulez pas que vos mains cash aillent dans Dropbox, n'utilisez pas l'import auto de H2N3 !
 
-Les dossiers Import, Export et Dropbox (si Copier vers Dropbox est activé) doivent être définis avant la conversion.
-Vous serez invité à ouvrir Paramètres si l'un d'eux manque.
 """,
     "es": """\
 Convertidor de historiales de manos
 
 1. Abra Ajustes (icono de engranaje) para configurar:
-   • Carpeta Import — archivos .txt de historiales sin convertir (predeterminado: import/)
+   • Carpeta Import — archivos .txt / .zip de historiales (predeterminado: import/)
    • Carpeta Export — archivos convertidos (predeterminado: export/)
-   • Vaciar carpeta Import tras convertir — elimina los .txt originales al terminar (después de copiar a Dropbox, si está activado)
-   • Coin hands as PS — exportar CoinPoker como PokerStars (Hand2Note sin suscripción Pro/Asia)
-   • Copiar a Dropbox — copia las manos sin convertir a Dropbox; muestra las carpetas Dropbox y Chico (opcional)
+   • Vaciar carpeta Import tras convertir — elimina los .txt/.zip originales al terminar (tras la copia a Dropbox, si está activa)
+   • Coin hands as PS — exportar CoinPoker como PokerStars (para Hand2Note sin suscripción Pro/Asia)
+   • Copiar a Dropbox — copia las manos sin convertir a Dropbox; muestra carpetas Dropbox y Chico (opcional)
+   • Importar desde carpetas — también vigila PokerPlanets y Downloads (solo archivos nuevos)
+   • Vaciar carpetas tras importar — con Dropbox, borra solo archivos procesados de carpetas vigiladas (no borra originales de Chico, ni archivos de Downloads no procesados / anteriores a la fecha del primer uso)
    • Apodo — nombre del héroe en manos GG / UP / Coin convertidas (predeterminado: Hero)
 
-2. Coloque archivos .txt de historiales en la carpeta Import. Salas: PokerPlanets, GGPokerOK, UPoker, CoinPoker.
+2. Coloque archivos .txt (o .zip GG/UP) en Import. Salas: PokerPlanets, GGPokerOK, UPpoker, CoinPoker (torneos + cash).
 
 3. Haga clic en Convert.
    • Los archivos convertidos se guardan en Export.
-   • Con Copiar a Dropbox: los archivos PP / GG / UP sin convertir y los Coin convertidos van a Dropbox.
-   • Los archivos Chico .txt se copian sin cambios (si está configurado).
-   • Con Vaciar Import: todos los .txt de Import se eliminan al final.
+   • Los .zip de manos se descomprimen; con Dropbox, los summaries van a …/year/summaries.
+   • Con Copiar a Dropbox: los archivos PP / GG / UP sin convertir van a Dropbox.
+   • Los .txt de Chico se copian a Dropbox sin cambios (si está configurado); los originales en la carpeta Chico se conservan.
+   • Importar desde carpetas solo procesa archivos nuevos desde la última ejecución. Los archivos de Downloads anteriores a la fecha del primer uso de la app se ignoran para evitar duplicados ya en Hand2Note. Impórtelos manualmente por Import si hace falta.
+   • Si no quiere que sus manos de cash lleguen a Dropbox, no use la importación automática de H2N3.
 
-Las carpetas Import, Export y Dropbox (si Copiar a Dropbox está activado) deben estar configuradas antes de convertir.
-Se le pedirá abrir Ajustes si falta alguna.
 """,
     "pl": """\
 Konwerter historii rozdań
 
 1. Otwórz Ustawienia (ikona koła zębatego), aby skonfigurować:
-   • Folder Import — surowe pliki .txt historii rozdań (domyślnie: import/)
+   • Folder Import — surowe pliki .txt / .zip historii rozdań (domyślnie: import/)
    • Folder Export — przekonwertowane pliki (domyślnie: export/)
-   • Wyczyść folder Import po konwersji — usuwa źródłowe .txt po zakończeniu (po kopiowaniu do Dropbox, jeśli włączone)
-   • Coin hands as PS — eksport CoinPoker jako PokerStars (Hand2Note bez subskrypcji Pro/Asia)
+   • Wyczyść folder Import po konwersji — usuwa źródłowe .txt/.zip po zakończeniu (po kopii do Dropbox, jeśli włączona)
+   • Coin hands as PS — eksport CoinPoker jako PokerStars (dla Hand2Note bez subskrypcji Pro/Asia)
    • Kopiuj do Dropbox — kopiuje surowe ręce do Dropbox; pokazuje foldery Dropbox i Chico (opcjonalnie)
+   • Import z folderów — także obserwuje PokerPlanets i Downloads (tylko nowe pliki)
+   • Wyczyść foldery po imporcie — przy Dropbox usuwa tylko przetworzone pliki z obserwowanych folderów (nie usuwa oryginałów Chico, nieprzetworzonych ani plików Downloads starszych niż data pierwszego uruchomienia)
    • Pseudonim — nazwa bohatera w przekonwertowanych rozdanach GG / UP / Coin (domyślnie: Hero)
 
-2. Umieść pliki .txt historii rozdań w folderze Import. Pokoje: PokerPlanets, GGPokerOK, UPoker, CoinPoker.
+2. Umieść pliki .txt (lub .zip GG/UP) w folderze Import. Pokoje: PokerPlanets, GGPokerOK, UPpoker, CoinPoker (turnieje + cash).
 
 3. Kliknij Convert.
    • Przekonwertowane pliki są zapisywane w Export.
-   • Przy Kopiuj do Dropbox: surowe pliki PP / GG / UP i przekonwertowane Coin trafiają do Dropbox.
-   • Pliki Chico .txt są kopiowane bez zmian (jeśli ustawione).
-   • Przy Wyczyść Import: wszystkie .txt w Import są usuwane na końcu.
+   • Archiwa .zip z rozdaniami są rozpakowywane; przy Dropbox summary trafiają do …/year/summaries.
+   • Przy Kopiuj do Dropbox: surowe PP / GG / UP trafiają do Dropbox.
+   • Pliki Chico .txt kopiowane do Dropbox bez zmian (jeśli ustawione); oryginały w folderze Chico pozostają.
+   • Import z folderów przetwarza tylko nowe pliki od ostatniego uruchomienia. Pliki w Downloads starsze niż data pierwszego uruchomienia aplikacji są ignorowane, aby uniknąć duplikatów już w bazie Hand2Note. W razie potrzeby zaimportuj je ręcznie przez folder Import.
+   • Jeśli nie chcesz, żeby rozdania cash trafiały do Dropbox, nie używaj autoimportu H2N3!
 
-Foldery Import, Export i Dropbox (gdy Kopiuj do Dropbox jest włączone) muszą być ustawione przed konwersją.
-Zostaniesz poproszony o otwarcie Ustawień, jeśli któregoś brakuje.
 """,
 }
 _LABEL_TO_INFO_LANG = {label: code for code, label in _INFO_LANGUAGE_LABELS.items()}
@@ -215,6 +233,9 @@ _APP_ICON = _ASSETS_DIR / "app.ico"
 _APP_ICON_PNG = _ASSETS_DIR / "app.png"
 _SETTINGS_ICON = _ASSETS_DIR / "settings_16.png"
 _HELP_ICON = _ASSETS_DIR / "help_16.png"
+_INFO_DIAGRAM = _ASSETS_DIR / "intended_way_to_use.png"
+_DISCORD_ICON = _ASSETS_DIR / "discord_24.png"
+_DISCORD_URL = "https://discord.gg/AKRS7YFaw"
 
 
 def _pixel_lum(rgb: tuple[int, int, int]) -> float:
@@ -293,6 +314,16 @@ class SettingsDialog(tk.Toplevel):
                 value=path_display(base.chico_import_path) if base.chico_import_path else ""
             ),
             "player_alias": tk.StringVar(value=base.player_alias),
+            "import_from_folders": tk.BooleanVar(value=base.import_from_folders),
+            "poker_planets_folder": tk.StringVar(
+                value=path_display(base.poker_planets_folder) if base.poker_planets_folder else ""
+            ),
+            "downloads_folder": tk.StringVar(
+                value=path_display(base.downloads_folder) if base.downloads_folder else ""
+            ),
+            "clear_folders_after_import": tk.BooleanVar(
+                value=base.clear_folders_after_import and base.dropbox_mode == "original"
+            ),
         }
 
         body = ttk.Frame(self, padding=12)
@@ -320,7 +351,7 @@ class SettingsDialog(tk.Toplevel):
             body,
             text="Copy to Dropbox",
             variable=self._vars["copy_to_dropbox"],
-            command=self._toggle_dropbox_fields,
+            command=self._on_dropbox_toggle,
         ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(4, 4))
         row += 1
 
@@ -342,6 +373,38 @@ class SettingsDialog(tk.Toplevel):
         )
         row += 1
 
+        ttk.Checkbutton(
+            body,
+            text="Import from folders",
+            variable=self._vars["import_from_folders"],
+            command=self._toggle_import_folders,
+        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(8, 4))
+        row += 1
+
+        self._folders_section = ttk.Frame(body)
+        self._folders_section.grid(row=row, column=0, columnspan=2, sticky="ew")
+        self._folders_section.columnconfigure(0, weight=1)
+        frow = 0
+        frow = self._add_path_row(
+            self._folders_section,
+            frow,
+            "PokerPlanets folder",
+            "poker_planets_folder",
+        )
+        frow = self._add_path_row(
+            self._folders_section,
+            frow,
+            "Downloads folder",
+            "downloads_folder",
+        )
+        self._clear_folders_cb = ttk.Checkbutton(
+            self._folders_section,
+            text="Clear folders after import",
+            variable=self._vars["clear_folders_after_import"],
+        )
+        self._clear_folders_cb.grid(row=frow, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        row += 1
+
         ttk.Label(body, text="Nickname (converted hero)").grid(
             row=row, column=0, columnspan=2, sticky="w", pady=(8, 2)
         )
@@ -360,14 +423,34 @@ class SettingsDialog(tk.Toplevel):
         self.bind("<Escape>", lambda _e: self._cancel())
 
         self._toggle_dropbox_fields()
+        self._toggle_import_folders()
+        self._sync_clear_folders_state()
         self.update_idletasks()
         self._center_over(parent)
+
+    def _on_dropbox_toggle(self) -> None:
+        self._toggle_dropbox_fields()
+        self._sync_clear_folders_state()
 
     def _toggle_dropbox_fields(self) -> None:
         if self._vars["copy_to_dropbox"].get():
             self._dropbox_section.grid()
         else:
             self._dropbox_section.grid_remove()
+
+    def _toggle_import_folders(self) -> None:
+        if self._vars["import_from_folders"].get():
+            self._folders_section.grid()
+        else:
+            self._folders_section.grid_remove()
+        self._sync_clear_folders_state()
+
+    def _sync_clear_folders_state(self) -> None:
+        dropbox_on = self._vars["copy_to_dropbox"].get()
+        if not dropbox_on:
+            self._vars["clear_folders_after_import"].set(False)
+        state = tk.NORMAL if dropbox_on else tk.DISABLED
+        self._clear_folders_cb.configure(state=state)
 
     def _center_over(self, parent: tk.Misc) -> None:
         self.update_idletasks()
@@ -406,8 +489,14 @@ class SettingsDialog(tk.Toplevel):
         export_path = self._vars["export_path"].get().strip()
         dropbox_path = self._vars["dropbox_base_path"].get().strip()
         chico_raw = self._vars["chico_import_path"].get().strip()
+        pp_folder = self._vars["poker_planets_folder"].get().strip()
+        downloads = self._vars["downloads_folder"].get().strip()
         alias = self._vars["player_alias"].get().strip()
         copy_to_dropbox = self._vars["copy_to_dropbox"].get()
+        import_from_folders = self._vars["import_from_folders"].get()
+        clear_folders = (
+            self._vars["clear_folders_after_import"].get() if copy_to_dropbox else False
+        )
 
         missing = [
             name
@@ -433,6 +522,10 @@ class SettingsDialog(tk.Toplevel):
             player_alias=alias,
             clear_import_after_convert=self._vars["clear_import_after_convert"].get(),
             coin_as_ps=self._vars["coin_as_ps"].get(),
+            import_from_folders=import_from_folders,
+            poker_planets_folder=Path(pp_folder) if pp_folder else None,
+            downloads_folder=Path(downloads) if downloads else None,
+            clear_folders_after_import=clear_folders,
         )
         try:
             save_settings(self._config_path, self._result)
@@ -448,15 +541,26 @@ class SettingsDialog(tk.Toplevel):
 
 
 class InfoDialog(tk.Toplevel):
-    _MIN_WIDTH = 480
-    _MIN_HEIGHT = 360
-    _MAX_WIDTH = 960
-    _MAX_HEIGHT = 720
+    _MIN_WIDTH = 520
+    _MIN_HEIGHT = 420
+    _MAX_WIDTH = 1400
+    _MAX_HEIGHT = 960
+    _DIAGRAM_DEFAULT_SCALE = 0.75  # of native (never default larger than original)
+    _PAD = 24
 
     def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self._lang_code = "en"
         self._parent = parent
+        self._diagram_pil: Image.Image | None = None
+        self._diagram_image: ImageTk.PhotoImage | None = None
+        self._diagram_full_image: ImageTk.PhotoImage | None = None
+        self._diagram_full_win: tk.Toplevel | None = None
+        self._discord_image: tk.PhotoImage | None = None
+        self._resize_after: str | None = None
+        self._last_diagram_width = 0
+        self._initial_layout_done = False
+
         self.title(_INFO_TITLE_LABELS[self._lang_code])
         apply_window_icon(self)
         self.resizable(True, True)
@@ -464,6 +568,18 @@ class InfoDialog(tk.Toplevel):
 
         frame = ttk.Frame(self, padding=12)
         frame.pack(fill=tk.BOTH, expand=True)
+
+        # Diagram above text, centered; click opens full-size view.
+        self._diagram_wrap = ttk.Frame(frame)
+        self._diagram_wrap.pack(fill=tk.X, pady=(0, 8))
+        self._diagram_label = tk.Label(
+            self._diagram_wrap,
+            cursor="hand2",
+            borderwidth=0,
+            highlightthickness=0,
+        )
+        self._diagram_label.pack(anchor=tk.CENTER)
+        self._diagram_label.bind("<Button-1>", self._open_diagram_full)
 
         text_frame = ttk.Frame(frame)
         text_frame.pack(fill=tk.BOTH, expand=True)
@@ -488,6 +604,9 @@ class InfoDialog(tk.Toplevel):
         footer = ttk.Frame(frame)
         footer.pack(fill=tk.X, pady=(8, 0))
 
+        self._discord_btn = self._make_discord_button(footer)
+        self._discord_btn.pack(side=tk.LEFT, padx=(0, 8))
+
         self._lang_var = tk.StringVar(value=_INFO_LANGUAGE_LABELS[self._lang_code])
         lang_combo = ttk.Combobox(
             footer,
@@ -499,13 +618,137 @@ class InfoDialog(tk.Toplevel):
         lang_combo.pack(side=tk.LEFT)
         lang_combo.bind("<<ComboboxSelected>>", self._on_language_change)
 
-        self._close_btn = ttk.Button(footer, command=self.destroy)
+        self._close_btn = ttk.Button(footer, command=self._on_close)
         self._close_btn.pack(side=tk.RIGHT)
 
+        self._load_diagram_source()
         self._set_language(self._lang_code)
 
-        self.protocol("WM_DELETE_WINDOW", self.destroy)
-        self.bind("<Escape>", lambda _e: self.destroy())
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.bind("<Escape>", lambda _e: self._on_close())
+        self.bind("<Configure>", self._on_configure)
+
+    def _on_close(self) -> None:
+        self._close_diagram_full()
+        self.destroy()
+
+    def _make_discord_button(self, parent: tk.Misc) -> ttk.Button | tk.Label:
+        if _DISCORD_ICON.is_file():
+            try:
+                self._discord_image = tk.PhotoImage(file=str(_DISCORD_ICON), master=self)
+            except tk.TclError:
+                self._discord_image = None
+        if self._discord_image is not None:
+            btn = tk.Label(
+                parent,
+                image=self._discord_image,
+                cursor="hand2",
+                borderwidth=0,
+                highlightthickness=0,
+            )
+            btn.bind("<Button-1>", self._open_discord)
+            return btn
+        btn = ttk.Button(parent, text="Discord", width=8, command=self._open_discord)
+        return btn
+
+    def _open_discord(self, _event: tk.Event | None = None) -> None:
+        webbrowser.open(_DISCORD_URL)
+
+    def _load_diagram_source(self) -> None:
+        if not _INFO_DIAGRAM.is_file():
+            self._diagram_wrap.pack_forget()
+            return
+        try:
+            self._diagram_pil = Image.open(_INFO_DIAGRAM).convert("RGBA")
+        except OSError:
+            self._diagram_pil = None
+            self._diagram_wrap.pack_forget()
+
+    def _default_diagram_width(self) -> int:
+        if self._diagram_pil is None:
+            return 620
+        native_w = self._diagram_pil.width
+        target = int(round(native_w * self._DIAGRAM_DEFAULT_SCALE))
+        screen_cap = int(self.winfo_screenwidth() * 0.7)
+        # Never default larger than the source image.
+        return max(320, min(target, native_w, screen_cap, self._MAX_WIDTH - self._PAD))
+
+    def _render_diagram(self, width: int) -> None:
+        if self._diagram_pil is None:
+            return
+        native_w = self._diagram_pil.width
+        width = max(160, min(int(width), native_w))
+        if width == self._last_diagram_width and self._diagram_image is not None:
+            return
+        native_h = self._diagram_pil.height
+        height = max(1, int(round(native_h * (width / native_w))))
+        resized = self._diagram_pil.resize((width, height), Image.Resampling.LANCZOS)
+        photo = ImageTk.PhotoImage(resized, master=self)
+        self._diagram_image = photo
+        self._last_diagram_width = width
+        self._diagram_label.configure(image=photo)
+
+    def _on_configure(self, event: tk.Event) -> None:
+        if event.widget is not self:
+            return
+        if not self._initial_layout_done or self._diagram_pil is None:
+            return
+        if self._resize_after is not None:
+            self.after_cancel(self._resize_after)
+        self._resize_after = self.after(80, self._resize_diagram_to_window)
+
+    def _resize_diagram_to_window(self) -> None:
+        self._resize_after = None
+        if self._diagram_pil is None:
+            return
+        inner = max(160, self.winfo_width() - self._PAD)
+        # Grow/shrink with the window but never past the original image width.
+        self._render_diagram(min(inner, self._diagram_pil.width))
+
+    def _open_diagram_full(self, _event: tk.Event | None = None) -> None:
+        if self._diagram_pil is None:
+            return
+        if self._diagram_full_win is not None and self._diagram_full_win.winfo_exists():
+            self._close_diagram_full()
+            return
+
+        win = tk.Toplevel(self)
+        self._diagram_full_win = win
+        win.title(_INFO_TITLE_LABELS.get(self._lang_code, "Instructions"))
+        apply_window_icon(win)
+        win.transient(self)
+        win.configure(cursor="hand2")
+
+        screen_w = win.winfo_screenwidth()
+        screen_h = win.winfo_screenheight()
+        native_w, native_h = self._diagram_pil.size
+        scale = min(1.0, (screen_w * 0.95) / native_w, (screen_h * 0.92) / native_h)
+        show_w = max(1, int(round(native_w * scale)))
+        show_h = max(1, int(round(native_h * scale)))
+        shown = self._diagram_pil.resize((show_w, show_h), Image.Resampling.LANCZOS)
+        photo = ImageTk.PhotoImage(shown, master=win)
+        self._diagram_full_image = photo
+
+        label = tk.Label(win, image=photo, cursor="hand2", borderwidth=0)
+        label.pack()
+        label.bind("<Button-1>", lambda _e: self._close_diagram_full())
+        win.bind("<Button-1>", lambda _e: self._close_diagram_full())
+        win.bind("<Escape>", lambda _e: self._close_diagram_full())
+        win.protocol("WM_DELETE_WINDOW", self._close_diagram_full)
+
+        win.update_idletasks()
+        x = self.winfo_rootx() + (self.winfo_width() - show_w) // 2
+        y = self.winfo_rooty() + (self.winfo_height() - show_h) // 2
+        win.geometry(f"{show_w}x{show_h}+{max(0, x)}+{max(0, y)}")
+
+    def _close_diagram_full(self) -> None:
+        if self._diagram_full_win is not None:
+            try:
+                self._diagram_full_win.destroy()
+            except tk.TclError:
+                pass
+        self._diagram_full_win = None
+        self._diagram_full_image = None
 
     def _on_language_change(self, _event: tk.Event | None = None) -> None:
         self._set_language(_info_lang_from_label(self._lang_var.get()))
@@ -531,9 +774,13 @@ class InfoDialog(tk.Toplevel):
         frame_pad = 48
         footer_height = 48
 
+        diagram_w = self._default_diagram_width()
+        self._render_diagram(diagram_w)
+        diagram_h = self._diagram_image.height() + 16 if self._diagram_image else 0
+
         cap_w = min(int(self.winfo_screenwidth() * 0.9), self._MAX_WIDTH)
         cap_h = min(int(self.winfo_screenheight() * 0.85), self._MAX_HEIGHT)
-        width = max(self._MIN_WIDTH, min(720, cap_w))
+        width = max(self._MIN_WIDTH, min(diagram_w + self._PAD, cap_w))
 
         self.geometry(f"{width}x{self._MIN_HEIGHT}")
         self.update_idletasks()
@@ -541,11 +788,14 @@ class InfoDialog(tk.Toplevel):
         content_h = line_height * display_lines + 24
         height = max(
             self._MIN_HEIGHT,
-            min(content_h + frame_pad + footer_height, cap_h),
+            min(content_h + frame_pad + footer_height + diagram_h, cap_h),
         )
 
         self.minsize(self._MIN_WIDTH, self._MIN_HEIGHT)
         self.geometry(f"{width}x{height}")
+        self._initial_layout_done = True
+        # Match diagram to final window width after geometry settles.
+        self.after(50, self._resize_diagram_to_window)
 
     def _center_over(self, parent: tk.Misc) -> None:
         self.update_idletasks()
@@ -561,7 +811,7 @@ class ConverterApp:
         self._settings: Settings | None = None
         self._busy = False
 
-        root.title("HH Converter")
+        root.title(f"HH Converter {__version__}")
         root.minsize(320, 140)
         root.resizable(False, False)
 
@@ -712,7 +962,7 @@ class ConverterApp:
             except OSError as exc:
                 error = f"IO problem: {exc}"
             except Exception as exc:  # noqa: BLE001 — show unexpected errors in the UI
-                error = f"Error: {exc}"
+                error = f"Error (v{__version__}): {exc}"
 
             self.root.after(0, lambda: self._convert_finished(error))
 

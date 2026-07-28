@@ -27,7 +27,7 @@ _HAND_ID_FN = {
 
 
 class PokerHandConverter:
-    """Convert GGPoker / UPoker ``Poker Hand #`` blocks to PokerStars format."""
+    """Convert GGPoker / UPpoker ``Poker Hand #`` blocks to PokerStars format."""
 
     def __init__(self, room: str) -> None:
         if room not in _HAND_ID_FN:

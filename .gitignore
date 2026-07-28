@@ -13,8 +13,7 @@ venv/
 env/
 
 # PyInstaller
-build/HHConverter/
-build/__pycache__/
+build/
 dist/
 *.spec.bak
 
@@ -28,10 +27,8 @@ dist/
 # Local runtime folders (created next to the app)
 import/
 export/
+_internal/
 *.zip
-
-# Dev scratch / diagnostics (local only)
-scratch/
 
 # OS
 Thumbs.db

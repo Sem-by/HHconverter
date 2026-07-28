@@ -21,7 +21,7 @@ a = Analysis(
         (str(project_root / "config.example.json"), "."),
         *collect_data_files("tzdata"),
     ],
-    hiddenimports=["tzdata", "zoneinfo"],
+    hiddenimports=["tzdata", "zoneinfo", "PIL", "PIL.Image", "PIL.ImageTk"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
