@@ -4,6 +4,7 @@ import re
 from collections.abc import Callable
 
 from converter.hand_ids import gg_display_hand_id
+from converter.normalize import restore_poker_hand_header_colon
 from converter.time_et import append_utc_bracket_et, normalize_level_piece
 
 _POKER_HAND_HEADER_RE = re.compile(r"Poker\s+Hand\s+#([^\s:]+)\s*:\s*(.+)")
@@ -43,7 +44,7 @@ class PokerHandConverter:
         if not lines:
             return block
 
-        first = lines[0].strip()
+        first = restore_poker_hand_header_colon(lines[0].strip())
         m = _POKER_HAND_HEADER_RE.match(first)
         if not m:
             return block

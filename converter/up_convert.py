@@ -4,6 +4,7 @@ import re
 
 from converter.coin_format import format_h2n_utc_datetime
 from converter.hand_ids import up_display_hand_id, up_display_tournament_id
+from converter.normalize import restore_poker_hand_header_colon
 from converter.time_et import (
     parse_header_timestamp,
     strip_existing_et_brackets,
@@ -33,7 +34,7 @@ class UPpokerConverter:
         if not lines:
             return block
 
-        first = lines[0].strip()
+        first = restore_poker_hand_header_colon(lines[0].strip())
         m = re.match(r"Poker\s+Hand\s+#([^\s:]+)\s*:\s*(.+)", first)
         if not m:
             return block

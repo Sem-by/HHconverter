@@ -7,6 +7,7 @@ from datetime import date
 from converter.coin_convert import coin_tournament_id, is_coin_cash_hand
 from converter.coin_format import clean_tournament_title, format_stakes_int, normalize_money
 from converter.hand_ids import up_display_tournament_id
+from converter.normalize import restore_poker_hand_header_colon
 from converter.pp_format import parse_pp_tournament_header
 from converter.time_et import parse_header_timestamp, strip_existing_et_brackets
 
@@ -94,6 +95,7 @@ def _pp_meta(header: str) -> TournamentMeta:
 
 
 def _gg_meta(header: str) -> TournamentMeta:
+    header = restore_poker_hand_header_colon(header)
     m = _GG_HEADER_RE.match(header)
     if not m:
         raise ValueError(f"Unrecognized GG header: {header!r}")

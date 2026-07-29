@@ -30,6 +30,17 @@ def global_postprocess(text: str, *, trim_total_pot: bool = True) -> str:
     return text.rstrip() + "\n"
 
 
+_MISSING_POKER_HAND_COLON_RE = re.compile(
+    r"^(Poker\s+Hand\s+#[^\s:]+)\s+(?!:)",
+    re.I,
+)
+
+
+def restore_poker_hand_header_colon(header: str) -> str:
+    """Insert ``:`` after ``Poker Hand #id`` when a room export omitted it."""
+    return _MISSING_POKER_HAND_COLON_RE.sub(r"\1: ", header, count=1)
+
+
 def gg_postprocess(text: str) -> str:
     """GG export: keep Jackpot/Bingo/etc. on Total pot lines; still normalize boards."""
     return global_postprocess(text, trim_total_pot=False)
