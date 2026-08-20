@@ -143,6 +143,8 @@ def room_hands_dir(cfg: Settings, room: str, year: int) -> Path:
         return base / "PokerPlanets" / year_s
     if room == "coinpoker":
         return base / "CoinPoker" / year_s
+    if room == "888poker":
+        return base / "888" / year_s
     return base / "Misc"
 
 

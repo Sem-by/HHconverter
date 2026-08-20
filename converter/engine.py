@@ -12,6 +12,7 @@ from converter.coin_convert import (
     coin_group_key,
     is_coin_cash_hand,
 )
+from converter.eight88_convert import Eight88Converter, eight88_group_key
 from converter.dropbox_mirror import (
     add_coin_dropbox_hands,
     copy_room_export,
@@ -463,10 +464,13 @@ def _convert_import_file(
     gg_blocks = [block for room, block in pairs if room == "ggpoker_ok"]
     up_blocks = [block for room, block in pairs if room == "uppoker"]
     coin_by_key: dict[str, list[str]] = defaultdict(list)
+    eight88_by_key: dict[str, list[str]] = defaultdict(list)
 
     for room, block in pairs:
         if room == "coinpoker":
             coin_by_key[coin_group_key(block)].append(block)
+        elif room == "888poker":
+            eight88_by_key[eight88_group_key(block)].append(block)
 
     if pp_blocks:
         pp_converter = PokerPlanetsConverter()
@@ -501,6 +505,14 @@ def _convert_import_file(
             )
             grouped_converted[("uppoker", "")].append(up_postprocess(converted))
         grouped_raw[("uppoker", "")].extend(up_blocks)
+
+    if eight88_by_key:
+        eight88_converter = Eight88Converter()
+        for key, blocks in eight88_by_key.items():
+            grouped_converted[("888poker", key)].extend(
+                eight88_converter.convert_file_blocks(blocks)
+            )
+            grouped_raw[("888poker", key)].extend(blocks)
 
     if coin_by_key:
         coin_converter = CoinPokerConverter(

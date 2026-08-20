@@ -13,7 +13,7 @@ from converter.coin_format import (
     normalize_coin_hand_actions,
     normalize_money,
 )
-from converter.hand_ids import HAND_PREFIX_COINPOKER, prefixed_hand_id
+from converter.hand_ids import coin_display_hand_id
 from converter.normalize import global_postprocess, replace_seat_token
 from converter.player_names import COIN_PLAYER_TOKEN, CashMultiTableNameSession, PlayerNameSession
 from converter.pp_blinds import format_blinds_piece
@@ -337,7 +337,7 @@ def _build_hand_cash(block: str, *, coin_as_ps: bool) -> str:
     bb_s = format_stakes_int(bb)
     if coin_as_ps:
         # PokerStars-style for non-PRO H2N: prefixed hand id, plain table name.
-        hid = prefixed_hand_id(HAND_PREFIX_COINPOKER, hand_id)
+        hid = coin_display_hand_id(hand_id)
         table_line = f"Table '{table_name}' {max_seats}-max Seat #{button} is the button"
     else:
         # H2N Coin-room style: raw hand id, CPR_ table prefix separates from real PS.
@@ -390,11 +390,13 @@ def _build_hand_ps(block: str) -> str:
         return block
 
     hand_id, sb, bb, ante, time_part, title_raw, tid, max_seats, button, body_lines = parsed
-    hid = prefixed_hand_id(HAND_PREFIX_COINPOKER, hand_id)
+    hid = coin_display_hand_id(hand_id)
     utc_time = coin_timestamp_to_utc(time_part)
     level_piece = format_blinds_piece(_stakes_int(sb), _stakes_int(bb), _stakes_int(ante))
+    # PokerStars import path: ₮ often becomes mojibake and can break buy-in / hand processing.
+    title = title_raw.replace("₮", "$")
     tail = (
-        f"Tournament #{tid}, {title_raw} Hold'em No Limit "
+        f"Tournament #{tid}, {title} Hold'em No Limit "
         f"- Level I {level_piece} - {utc_time}"
     )
     tail = normalize_pp_header_timestamp(tail)

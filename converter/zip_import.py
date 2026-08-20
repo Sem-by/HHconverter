@@ -22,6 +22,7 @@ _HH_FIRST_LINE_PREFIXES = (
     "Poker Hand #",
     "PokerPlanets Hand #",
     "CoinPoker Hand #",
+    "***** 888poker Hand History",
 )
 
 

@@ -1,6 +1,8 @@
 HAND_PREFIX_POKER_PLANETS = "111111"
 HAND_PREFIX_GGPOKER = "222222"
-HAND_PREFIX_COINPOKER = "333333"
+# Short prefix: ``333333`` + 10–12 digit Coin ids → 16–18 digits, which collide in
+# IEEE-754 doubles (Hand2Note/JS). Keep total length ≤ 14 like GG/UP (12-digit) ids.
+HAND_PREFIX_COINPOKER = "33"
 HAND_PREFIX_UPPOKER = "444444"
 
 _GG_ID_SOURCE_PREFIX = "5730"
@@ -26,6 +28,11 @@ def prefixed_hand_id(prefix: str, raw_hand_id: str, *, strip_tm: bool = False) -
     """Build display hand id: room prefix + suffix (optionally drop leading ``TM`` for GG)."""
     suffix = poker_hand_suffix(raw_hand_id) if strip_tm else raw_hand_id.strip()
     return f"{prefix}{suffix}"
+
+
+def coin_display_hand_id(raw_hand_id: str) -> str:
+    """Coin → PokerStars-style id that stays unique under float64 (≤14 digits)."""
+    return prefixed_hand_id(HAND_PREFIX_COINPOKER, raw_hand_id)
 
 
 def gg_display_hand_id(raw_hand_id: str) -> str:

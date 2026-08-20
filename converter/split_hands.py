@@ -11,7 +11,9 @@ _HAND_START_PREFIXES = (
     "CoinPoker Hand #",
     "Poker Hand #",
     "PokerStars Hand #",
+    "***** 888poker Hand History",
 )
+_GAME_NO_LINE_RE = re.compile(r"^#Game No\s*:", re.I)
 
 
 def iter_hand_blocks(path: Path) -> Iterable[str]:
@@ -30,9 +32,17 @@ def iter_hand_blocks(path: Path) -> Iterable[str]:
     for raw in lines:
         line = raw.rstrip("\r")
         if _starts_new_hand(line) and buf:
+            if _is_888_preamble(buf):
+                buf.append(line)
+                continue
             done = flush()
             if done:
                 yield done
+            buf.append(line)
+            continue
+        if _starts_new_hand(line):
+            buf.append(line)
+            continue
         buf.append(line)
 
     last = flush()
@@ -49,6 +59,11 @@ def _strip_bom(text: str) -> str:
     return text.removeprefix("\ufeff")
 
 
+def _is_888_preamble(buf: list[str]) -> bool:
+    nonempty = [ln.strip() for ln in buf if ln.strip()]
+    return bool(nonempty) and all(_GAME_NO_LINE_RE.match(ln) for ln in nonempty)
+
+
 _POKER_HAND_HEADER_RE = re.compile(r"Poker Hand #([^\s:]+)")
 
 
@@ -58,6 +73,10 @@ def detect_room_from_first_line(first_line: str) -> str | None:
         return "poker_planets"
     if s.startswith("CoinPoker Hand #"):
         return "coinpoker"
+    if s.startswith("***** 888poker Hand History"):
+        return "888poker"
+    if _GAME_NO_LINE_RE.match(s):
+        return "888poker"
     m = _POKER_HAND_HEADER_RE.match(s)
     if m:
         return detect_poker_hand_room(m.group(1))

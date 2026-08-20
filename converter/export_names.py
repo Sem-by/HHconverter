@@ -6,6 +6,7 @@ from datetime import date
 
 from converter.coin_convert import coin_tournament_id, is_coin_cash_hand
 from converter.coin_format import clean_tournament_title, format_stakes_int, normalize_money
+from converter.eight88_convert import eight88_tournament_meta
 from converter.hand_ids import up_display_tournament_id
 from converter.normalize import restore_poker_hand_header_colon
 from converter.pp_format import parse_pp_tournament_header
@@ -16,6 +17,7 @@ _ROOM_ABBREV = {
     "ggpoker_ok": "GG",
     "uppoker": "UP",
     "coinpoker": "Coin",
+    "888poker": "888",
 }
 
 _PP_HEADER_RE = re.compile(r"PokerPlanets\s+Hand\s+#\d+\s*:\s*(.+)", re.I)
@@ -75,6 +77,8 @@ def tournament_meta_from_blocks(room: str, blocks: list[str]) -> TournamentMeta:
         return _up_meta(first)
     if room == "coinpoker":
         return _coin_meta(blocks[0])
+    if room == "888poker":
+        return _888_meta(blocks[0])
     raise ValueError(f"Unsupported room for export naming: {room}")
 
 
@@ -130,6 +134,11 @@ def _up_meta(header: str) -> TournamentMeta:
     )
 
 
+def _888_meta(block: str) -> TournamentMeta:
+    tid, price, name, played = eight88_tournament_meta(block)
+    return TournamentMeta("888poker", tid, price, name, date.fromisoformat(played))
+
+
 def _coin_meta(block: str) -> TournamentMeta:
     header = block.splitlines()[0].strip()
     played = _header_date(header)
@@ -151,7 +160,7 @@ def _coin_meta(block: str) -> TournamentMeta:
         legacy = _COIN_LEGACY_TITLE_RE.match(header)
         raw_title = legacy.group(1).strip() if legacy else ""
     price_m = _COIN_PRICE_RE.match(raw_title.strip()) if raw_title else None
-    price = price_m.group(1) if price_m else ""
+    price = price_m.group(1).replace("₮", "$") if price_m else ""
     name = clean_tournament_title(raw_title) if raw_title else tid
     return TournamentMeta("coinpoker", tid, price, name, played)
 

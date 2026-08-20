@@ -32,6 +32,13 @@ _TOTAL_POT_RE = re.compile(rf"^Total pot {_MONEY}")
 _SUMMARY_WON_ONLY_RE = re.compile(
     rf"^(Seat \d+: \S+(?: \([^)]+\))?) won \({_MONEY}\)\s*$"
 )
+_SUMMARY_SHOWED_WON_BARE_RE = re.compile(
+    rf"^(Seat \d+: \S+) showed \[[^\]]+\] and won \({_MONEY}\)\s*$"
+)
+_SUMMARY_DIDNT_SHOW_RE = re.compile(
+    r"^(Seat \d+: \S+) didn't show\s*$",
+    re.I,
+)
 _SUMMARY_MONEY_RE = re.compile(rf"\({_MONEY}\)")
 _TOURNAMENT_TITLE_RE = re.compile(r"^₮[\d.]+\s+")
 _CURRENCY_PREFIX_RE = re.compile(r"[₮$€]")
@@ -254,7 +261,179 @@ def normalize_coin_hand_actions(text: str) -> str:
     lines = text.splitlines()
     if not lines:
         return text
-    return "\n".join(normalize_coin_action_lines(lines))
+    text = "\n".join(normalize_coin_action_lines(lines))
+    return fix_short_blind_allin_for_h2n(text)
+
+
+_LEVEL_BLINDS_RE = re.compile(
+    r"Level [^\n]*\(([\d,.]+)/([\d,.]+)(?:\(([\d,.]+)\))?\)",
+    re.I,
+)
+_SEAT_STACK_RE = re.compile(
+    r"^(Seat \d+: )(\S+) \(([\d,.]+) in chips\)$",
+)
+_POST_SB_LINE_RE = re.compile(
+    r"^(\S+): posts small blind ([\d,.]+)( and is all-in)?$"
+)
+_POST_BB_AI_LINE_RE = re.compile(
+    r"^(\S+): posts big blind ([\d,.]+) and is all-in$"
+)
+_POST_ANTE_LINE_RE = re.compile(
+    r"^(\S+): posts the ante ([\d,.]+)( and is all-in)?$"
+)
+_UNCALLED_LINE_RE = re.compile(
+    r"^Uncalled bet \(([\d,.]+)\) returned to (\S+)$"
+)
+
+
+def _coin_amt_token(value: float) -> str:
+    if abs(value - round(value)) < 1e-9:
+        return str(int(round(value)))
+    text = f"{value:.10f}".rstrip("0").rstrip(".")
+    return text
+
+
+def fix_short_blind_allin_for_h2n(text: str) -> str:
+    """Rewrite short big-blind all-ins that Hand2Note BuildStats drops or NullRefs.
+
+    Pattern A — walk to chip-dead / short-stack BB (SB folds, no board): H2N expects a
+    live BB; rewrite as a normal full-BB walk with enough chips behind.
+
+    Pattern B — blinds-only all-in runout (short BB, no call/raise, board dealt): match
+    the SB post to the BB all-in amount, drop uncalled, insert an SB check, and round
+    chip amounts to integers (H2N NullRefs on the decimal blinds-only split path).
+    """
+    lines = text.splitlines()
+    if len(lines) < 8:
+        return text
+
+    level = _LEVEL_BLINDS_RE.search(lines[0])
+    if not level:
+        return text
+    level_sb = float(normalize_money(level.group(1)))
+    level_bb = float(normalize_money(level.group(2)))
+
+    sb_i = bb_i = None
+    for i, line in enumerate(lines):
+        if sb_i is None and _POST_SB_LINE_RE.match(line):
+            sb_i = i
+        if bb_i is None and _POST_BB_AI_LINE_RE.match(line):
+            bb_i = i
+    if sb_i is None or bb_i is None:
+        return text
+
+    sb_m = _POST_SB_LINE_RE.match(lines[sb_i])
+    bb_m = _POST_BB_AI_LINE_RE.match(lines[bb_i])
+    assert sb_m and bb_m
+    sb_name, sb_post = sb_m.group(1), float(normalize_money(sb_m.group(2)))
+    bb_name, bb_post = bb_m.group(1), float(normalize_money(bb_m.group(2)))
+
+    if bb_post + 0.001 >= level_bb:
+        return text
+
+    has_flop = any(line.startswith("*** FLOP ***") for line in lines)
+    has_voluntary = any(
+        re.match(r"^\S+: (calls|raises|bets) ", line) for line in lines
+    )
+    uncalled_i = next(
+        (i for i, line in enumerate(lines) if _UNCALLED_LINE_RE.match(line)),
+        None,
+    )
+    uncalled_to = None
+    if uncalled_i is not None:
+        um = _UNCALLED_LINE_RE.match(lines[uncalled_i])
+        assert um
+        uncalled_to = um.group(2)
+
+    sb_folded = any(line == f"{sb_name}: folds" for line in lines)
+    sb_checked = any(line == f"{sb_name}: checks" for line in lines)
+
+    # --- Pattern A: walk to short BB who covered SB ---
+    if (
+        not has_flop
+        and not has_voluntary
+        and sb_folded
+        and bb_post + 1e-9 >= sb_post
+        and uncalled_to == bb_name
+    ):
+        ante = 0.0
+        for line in lines:
+            am = _POST_ANTE_LINE_RE.match(line)
+            if am and am.group(1) == bb_name:
+                ante = float(normalize_money(am.group(2)))
+                break
+        seat_i = next(
+            (
+                i
+                for i, line in enumerate(lines)
+                if (m := _SEAT_STACK_RE.match(line)) and m.group(2) == bb_name
+            ),
+            None,
+        )
+        if seat_i is None:
+            return text
+        seat_m = _SEAT_STACK_RE.match(lines[seat_i])
+        assert seat_m
+        stack = float(normalize_money(seat_m.group(3)))
+        remaining = stack - ante - bb_post
+        if remaining + 1e-9 >= sb_post:
+            return text
+
+        need_stack = ante + level_bb + sb_post
+        lines[seat_i] = f"{seat_m.group(1)}{bb_name} ({_coin_amt_token(need_stack)} in chips)"
+        lines[bb_i] = f"{bb_name}: posts big blind {_coin_amt_token(level_bb)}"
+        if uncalled_i is not None:
+            lines[uncalled_i] = (
+                f"Uncalled bet ({_coin_amt_token(level_bb - sb_post)}) "
+                f"returned to {bb_name}"
+            )
+        return "\n".join(lines)
+
+    # --- Pattern B: short BB vs SB runout, no voluntary money ---
+    # Matches both the raw form (uncalled to SB) and the prior partial rewrite
+    # (SB already matched to BB, uncalled removed).
+    pattern_b = (
+        has_flop
+        and not has_voluntary
+        and not sb_folded
+        and (
+            uncalled_to == sb_name
+            or (uncalled_i is None and abs(sb_post - bb_post) < 0.001)
+        )
+    )
+    if pattern_b:
+        bb_tok = _coin_amt_token(bb_post)
+        lines[sb_i] = f"{sb_name}: posts small blind {bb_tok}"
+        lines[bb_i] = f"{bb_name}: posts big blind {bb_tok} and is all-in"
+        if uncalled_i is not None:
+            del lines[uncalled_i]
+            if uncalled_i < sb_i:
+                sb_i -= 1
+            if uncalled_i < bb_i:
+                bb_i -= 1
+        if not sb_checked:
+            flop_i = next(
+                i for i, line in enumerate(lines) if line.startswith("*** FLOP ***")
+            )
+            lines.insert(flop_i, f"{sb_name}: checks")
+        return _integerize_hand_decimals("\n".join(lines))
+
+    return text
+
+
+def _integerize_hand_decimals(text: str) -> str:
+    """Round fractional chip amounts in the body; keep the header buy-in text intact."""
+
+    def repl(match: re.Match[str]) -> str:
+        return str(int(round(float(match.group(0)))))
+
+    lines = text.splitlines()
+    if not lines:
+        return text
+    out = [lines[0]]
+    for line in lines[1:]:
+        out.append(re.sub(r"\d+\.\d+", repl, line))
+    return "\n".join(out)
 
 
 def _format_body_line(line: str, *, currency: str) -> str | None:
@@ -363,6 +542,15 @@ def _format_body_line(line: str, *, currency: str) -> str | None:
     m = _SUMMARY_WON_ONLY_RE.match(stripped)
     if m:
         return f"{m.group(1)} collected ({_format_amount(m.group(2), currency=currency)})"
+
+    # Coin walks: "showed [Xx Yy] and won (N)" with no hand rank — PS uses collected.
+    m = _SUMMARY_SHOWED_WON_BARE_RE.match(stripped)
+    if m:
+        return f"{m.group(1)} collected ({_format_amount(m.group(2), currency=currency)})"
+
+    m = _SUMMARY_DIDNT_SHOW_RE.match(stripped)
+    if m:
+        return f"{m.group(1)} mucked"
 
     if stripped.startswith("Seat ") and ("collected (" in stripped or "won (" in stripped):
         return _SUMMARY_MONEY_RE.sub(
