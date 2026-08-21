@@ -18,11 +18,10 @@ _CASH_TABLE_RE = re.compile(
 _GAME_NO_RE = re.compile(r"^#Game No\s*:\s*\d+\s*$", re.I | re.M)
 _RUNOUT_MARKER_RE = re.compile(r"^\*\* (First|Second) runout \*\*\s*$", re.I | re.M)
 _RUNOUT_PREFIX_RE = re.compile(r"^(First|Second) runout ", re.I | re.M)
-# 888 timestamps: ``*** DD MM YYYY HH:MM:SS`` (day-month-year).
+# 888 timestamps: ``… Blinds … Holdem - *** DD MM YYYY HH:MM:SS``
+# Newer exports use ``No Limit Holdem``; some use the short ``NL Holdem``.
 _TIMESTAMP_RE = re.compile(
-    r"Blinds No Limit Holdem\s+-\s+\*\*\*\s+"
-    r"(\d{1,2})\s+(\d{1,2})\s+(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s*$",
-    re.I,
+    r"\*\*\*\s+(\d{1,2})\s+(\d{1,2})\s+(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s*$"
 )
 _BUYIN_RE = re.compile(r"^(\$[\d.]+(?:\s*\+\s*\$[\d.]+)?)\s*(.*)$")
 

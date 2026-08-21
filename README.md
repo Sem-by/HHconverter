@@ -78,7 +78,7 @@ First-run date is stored in `_internal/import_watch_state.json` (`first_run_date
 | GGPokerOK | `Poker Hand #TM5730…` | Numeric TM ids |
 | UPpoker | `Poker Hand #TM0…` | Hex TM ids |
 | CoinPoker | `CoinPoker Hand #` | Tournaments + cash; H2N Coin / optional PS |
-| 888poker | `***** 888poker Hand History` | New format → legacy Pacific text; Dropbox `888/{year}/` |
+| 888poker | `***** 888poker Hand History` | New format → legacy Pacific text; Dropbox `888/{year}/` (raw) |
 
 Chico files are copied as-is when `chico_import_path` is set (not converted).
 
