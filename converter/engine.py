@@ -238,18 +238,17 @@ def _collect_import_txt_files(
         )
 
     if cfg.import_from_folders:
-        for folder in (cfg.poker_planets_folder, cfg.downloads_folder):
+        # PP / 888 clients nest HH under date/table subfolders → recursive.
+        watched_txt: list[tuple[Path | None, bool, int | None]] = [
+            (cfg.poker_planets_folder, True, None),
+            (cfg.eight88_folder, True, None),
+            (cfg.downloads_folder, False, downloads_min_mtime_ns),
+        ]
+        for folder, recursive, min_mtime in watched_txt:
             if folder is None or not is_path_set(folder) or not folder.is_dir():
                 continue
             key = folder_key(folder)
             state = watch_state.get(key, FolderWatchState(set(), 0))
-            # PokerPlanets client dumps HH into date/table subfolders.
-            recursive = folder == cfg.poker_planets_folder
-            min_mtime = (
-                downloads_min_mtime_ns
-                if folder == cfg.downloads_folder
-                else None
-            )
             new_files = select_new_files(
                 folder,
                 state,

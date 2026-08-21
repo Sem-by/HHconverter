@@ -61,7 +61,7 @@ Hand History Converter
    • Clear Import folder after converting — removes source .txt/.zip files when done (after Dropbox copy, if enabled)
    • Coin hands as PS - export CoinPoker as PokerStars (for Hand2Note without Pro/Asia subscription)
    • Copy to Dropbox — mirrors raw PP / GG / UP / 888 / Chico hands to Dropbox; shows Dropbox and optional Chico folders
-   • Import from folders — also watch PokerPlanets and Downloads folders for new files only
+   • Import from folders — also watch PokerPlanets, 888poker, and Downloads folders for new files only
    • Clear folders after import — with "Copy to Dropbox" on, delete only processed files from watched folders after copy (never deletes Chico originals, unprocessed or pre–first-run Downloads files)
    • Nickname — hero name in converted GG / UP / Coin hands (default: Hero)
 
@@ -85,7 +85,7 @@ Hand History Converter
    • Очистить папку Import после конвертации — удаляет исходные .txt/.zip после завершения (после копирования в Dropbox, если включено)
    • Coin hands as PS — экспорт CoinPoker в формате PokerStars (для Hand2Note без подписки Pro/Asia)
    • Копировать в Dropbox — копирует исходные PP / GG / UP / 888 / Chico в Dropbox; открывает поля Dropbox и Chico (необязательно)
-   • Импорт из папок — также следит за папками PokerPlanets и Downloads (только новые файлы)
+   • Импорт из папок — также следит за папками PokerPlanets, 888poker и Downloads (только новые файлы)
    • Очистить папки после импорта — при включённом Dropbox удаляет только обработанные файлы из доп. папок (не удаляет оригиналы Chico, необработанные и файлы Downloads старше даты первого запуска)
    • Никнейм — имя героя в конвертированных раздачах GG / UP / Coin (по умолчанию: Hero)
 
@@ -109,7 +109,7 @@ Hand History Converter
    • Очистити папку Import після конвертації — видаляє вихідні .txt/.zip після завершення (після копіювання в Dropbox, якщо увімкнено)
    • Coin hands as PS — експорт CoinPoker у форматі PokerStars (для Hand2Note без підписки Pro/Asia)
    • Копіювати в Dropbox — копіює вихідні PP / GG / UP / 888 / Chico у Dropbox; показує поля Dropbox і Chico (необов'язково)
-   • Імпорт з папок — також стежить за папками PokerPlanets і Downloads (лише нові файли)
+   • Імпорт з папок — також стежить за папками PokerPlanets, 888poker і Downloads (лише нові файли)
    • Очистити папки після імпорту — з увімкненим Dropbox видаляє лише оброблені файли з додаткових папок (не видаляє оригінали Chico, необроблені та файли Downloads старші за дату першого запуску)
    • Нікнейм — ім'я героя в сконвертованих роздачах GG / UP / Coin (за замовчуванням: Hero)
 
@@ -133,7 +133,7 @@ Hand History Converter
    • Түрлендіргеннен кейін Import қалтасын тазарту — аяқталғаннан кейін бастапқы .txt/.zip файлдарын жояды (Dropbox көшіруінен кейін, егер қосулы болса)
    • Coin hands as PS — CoinPoker-ді PokerStars форматында экспорттау (Pro/Asia жазылымы жоқ Hand2Note үшін)
    • Dropbox-қа көшіру — PP / GG / UP / 888 / Chico бастапқы файлдарын Dropbox-қа көшіреді; Dropbox және Chico өрістерін көрсетеді
-   • Қалталардан импорт — PokerPlanets және Downloads қалталарын қадағалайды (тек жаңа файлдар)
+   • Қалталардан импорт — PokerPlanets, 888poker және Downloads қалталарын қадағалайды (тек жаңа файлдар)
    • Импорттан кейін қалталарды тазарту — Dropbox қосулы болса, тек өңделген файлдарды қосымша қалталардан жояды (Chico түпнұсқаларын, өңделмеген және бірінші іске қосу күнінен бұрынғы Downloads файлдарын жоймайды)
    • Лақап аты — түрлендірілген GG / UP / Coin раздачаларындағы кейіпкер аты (әдепкі: Hero)
 
@@ -157,7 +157,7 @@ Convertisseur d'historiques de mains
    • Vider le dossier Import après conversion — supprime les .txt/.zip sources une fois terminé (après copie Dropbox, si activée)
    • Coin hands as PS — export CoinPoker en PokerStars (pour Hand2Note sans abonnement Pro/Asia)
    • Copier vers Dropbox — copie les mains brutes PP / GG / UP / 888 / Chico vers Dropbox ; affiche les dossiers Dropbox et Chico (optionnel)
-   • Importer depuis des dossiers — surveille aussi PokerPlanets et Downloads (nouveaux fichiers seulement)
+   • Importer depuis des dossiers — surveille aussi PokerPlanets, 888poker et Downloads (nouveaux fichiers seulement)
    • Vider les dossiers après import — avec Dropbox, supprime uniquement les fichiers traités des dossiers surveillés (ne supprime jamais les originaux Chico, ni les fichiers Downloads non traités / antérieurs à la date de première exécution)
    • Pseudo — nom du héros dans les mains GG / UP / Coin converties (par défaut : Hero)
 
@@ -181,7 +181,7 @@ Convertidor de historiales de manos
    • Vaciar carpeta Import tras convertir — elimina los .txt/.zip originales al terminar (tras la copia a Dropbox, si está activa)
    • Coin hands as PS — exportar CoinPoker como PokerStars (para Hand2Note sin suscripción Pro/Asia)
    • Copiar a Dropbox — copia las manos PP / GG / UP / 888 / Chico sin convertir a Dropbox; muestra carpetas Dropbox y Chico (opcional)
-   • Importar desde carpetas — también vigila PokerPlanets y Downloads (solo archivos nuevos)
+   • Importar desde carpetas — también vigila PokerPlanets, 888poker y Downloads (solo archivos nuevos)
    • Vaciar carpetas tras importar — con Dropbox, borra solo archivos procesados de carpetas vigiladas (no borra originales de Chico, ni archivos de Downloads no procesados / anteriores a la fecha del primer uso)
    • Apodo — nombre del héroe en manos GG / UP / Coin convertidas (predeterminado: Hero)
 
@@ -205,7 +205,7 @@ Konwerter historii rozdań
    • Wyczyść folder Import po konwersji — usuwa źródłowe .txt/.zip po zakończeniu (po kopii do Dropbox, jeśli włączona)
    • Coin hands as PS — eksport CoinPoker jako PokerStars (dla Hand2Note bez subskrypcji Pro/Asia)
    • Kopiuj do Dropbox — kopiuje surowe PP / GG / UP / 888 / Chico do Dropbox; pokazuje foldery Dropbox i Chico (opcjonalnie)
-   • Import z folderów — także obserwuje PokerPlanets i Downloads (tylko nowe pliki)
+   • Import z folderów — także obserwuje PokerPlanets, 888poker i Downloads (tylko nowe pliki)
    • Wyczyść foldery po imporcie — przy Dropbox usuwa tylko przetworzone pliki z obserwowanych folderów (nie usuwa oryginałów Chico, nieprzetworzonych ani plików Downloads starszych niż data pierwszego uruchomienia)
    • Pseudonim — nazwa bohatera w przekonwertowanych rozdanach GG / UP / Coin (domyślnie: Hero)
 
@@ -318,6 +318,9 @@ class SettingsDialog(tk.Toplevel):
             "poker_planets_folder": tk.StringVar(
                 value=path_display(base.poker_planets_folder) if base.poker_planets_folder else ""
             ),
+            "eight88_folder": tk.StringVar(
+                value=path_display(base.eight88_folder) if base.eight88_folder else ""
+            ),
             "downloads_folder": tk.StringVar(
                 value=path_display(base.downloads_folder) if base.downloads_folder else ""
             ),
@@ -390,6 +393,12 @@ class SettingsDialog(tk.Toplevel):
             frow,
             "PokerPlanets folder",
             "poker_planets_folder",
+        )
+        frow = self._add_path_row(
+            self._folders_section,
+            frow,
+            "888poker folder",
+            "eight88_folder",
         )
         frow = self._add_path_row(
             self._folders_section,
@@ -490,6 +499,7 @@ class SettingsDialog(tk.Toplevel):
         dropbox_path = self._vars["dropbox_base_path"].get().strip()
         chico_raw = self._vars["chico_import_path"].get().strip()
         pp_folder = self._vars["poker_planets_folder"].get().strip()
+        eight88_folder = self._vars["eight88_folder"].get().strip()
         downloads = self._vars["downloads_folder"].get().strip()
         alias = self._vars["player_alias"].get().strip()
         copy_to_dropbox = self._vars["copy_to_dropbox"].get()
@@ -524,6 +534,7 @@ class SettingsDialog(tk.Toplevel):
             coin_as_ps=self._vars["coin_as_ps"].get(),
             import_from_folders=import_from_folders,
             poker_planets_folder=Path(pp_folder) if pp_folder else None,
+            eight88_folder=Path(eight88_folder) if eight88_folder else None,
             downloads_folder=Path(downloads) if downloads else None,
             clear_folders_after_import=clear_folders,
         )

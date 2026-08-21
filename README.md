@@ -62,8 +62,9 @@ Copy `config.example.json` to `config.json`:
 | `chico_import_path` | Chico `.txt` folder to copy unchanged (or `null`) |
 | `clear_import_after_convert` | Delete `*.txt` / `*.zip` under Import after a successful run |
 | `coin_as_ps` | Export CoinPoker as PokerStars-style (for H2N without Pro/Asia) |
-| `import_from_folders` | Also watch PokerPlanets / Downloads for new files |
+| `import_from_folders` | Also watch PokerPlanets / 888poker / Downloads for new files |
 | `poker_planets_folder` | PokerPlanets HH root (recursive) |
+| `eight88_folder` | 888poker HH root (recursive) |
 | `downloads_folder` | Downloads folder for GG/UP/Coin zips and txt |
 | `clear_folders_after_import` | With Dropbox on: delete **processed** watched files only (not Chico) |
 | `player_alias` | Hero nickname in GG / UP / Coin output |
