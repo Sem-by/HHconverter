@@ -144,7 +144,7 @@ def room_hands_dir(cfg: Settings, room: str, year: int) -> Path:
     if room == "coinpoker":
         return base / "CoinPoker" / year_s
     if room == "888poker":
-        return base / "888" / year_s
+        return base / "888" / "hands" / year_s
     return base / "Misc"
 
 
@@ -159,7 +159,7 @@ def room_summaries_dir(cfg: Settings, room: str, year: int) -> Path:
 
 
 def migrate_dropbox_layout(cfg: Settings, *, console_print: bool) -> None:
-    """Move old Dropbox layouts (GG/UP hands+summaries order, Chico months, UPpoker name)."""
+    """Move old Dropbox layouts (GG/UP hands+summaries order, Chico months, UPpoker name, 888 year folders)."""
     if cfg.dropbox_mode == "none" or not is_path_set(cfg.dropbox_base_path):
         return
     base = cfg.dropbox_base_path
@@ -170,6 +170,7 @@ def migrate_dropbox_layout(cfg: Settings, *, console_print: bool) -> None:
     _migrate_room_kind_year_under(base, "GG", "summaries", console_print=console_print)
     _migrate_up_layouts(base, console_print=console_print)
     _migrate_chico_months(base, console_print=console_print)
+    _migrate_888_year_to_hands(base, console_print=console_print)
 
 
 def year_from_summary_name(name: str) -> int | None:
@@ -214,6 +215,18 @@ def _migrate_room_kind_year_under(
         if _relocate_dir(year_dir, new_dir, console_print=console_print):
             _remove_if_empty(old_root)
             _remove_if_empty(base / room / kind)
+
+
+def _migrate_888_year_to_hands(base: Path, *, console_print: bool) -> None:
+    """``888/{year}/`` → ``888/hands/{year}/``."""
+    old_root = base / "888"
+    if not old_root.is_dir():
+        return
+    for year_dir in sorted(
+        p for p in old_root.iterdir() if p.is_dir() and p.name.isdigit()
+    ):
+        new_dir = base / "888" / "hands" / year_dir.name
+        _relocate_dir(year_dir, new_dir, console_print=console_print)
 
 
 _JUNK_NAMES = frozenset(

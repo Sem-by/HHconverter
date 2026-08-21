@@ -57,7 +57,7 @@ Copy `config.example.json` to `config.json`:
 |-------|-------------|
 | `import_path` | Folder with raw `.txt` / `.zip` hand histories |
 | `export_path` | Converted output folder |
-| `dropbox_base_path` | Dropbox root for mirrored hands (empty = off). Layout: `PokerPlanets/`, `GGPokerOK/{year}/`, `UPpoker/{year}/`, `888/{year}/`, `Chico/`, … |
+| `dropbox_base_path` | Dropbox root for mirrored hands (empty = off). Layout: `PokerPlanets/`, `GGPokerOK/{year}/`, `UPpoker/{year}/`, `888/hands/{year}/`, `Chico/`, … |
 | `dropbox_mode` | `"original"` or `"none"` |
 | `chico_import_path` | Chico `.txt` folder to copy unchanged (or `null`) |
 | `clear_import_after_convert` | Delete `*.txt` / `*.zip` under Import after a successful run |
@@ -78,7 +78,7 @@ First-run date is stored in `_internal/import_watch_state.json` (`first_run_date
 | GGPokerOK | `Poker Hand #TM5730…` | Numeric TM ids |
 | UPpoker | `Poker Hand #TM0…` | Hex TM ids |
 | CoinPoker | `CoinPoker Hand #` | Tournaments + cash; H2N Coin / optional PS |
-| 888poker | `***** 888poker Hand History` | New format → legacy Pacific text; Dropbox `888/{year}/` (raw) |
+| 888poker | `***** 888poker Hand History` | New format → legacy Pacific text; Dropbox `888/hands/{year}/` (raw) |
 
 Chico files are copied as-is when `chico_import_path` is set (not converted).
 
