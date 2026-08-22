@@ -4,8 +4,9 @@ Convert tournament and cash (CoinPoker) hand histories from multiple poker rooms
 
 Supports **PokerPlanets**, **GGPokerOK**, **UPpoker**, **CoinPoker**, and **888poker**, with optional Dropbox backup and **Chico** hands copy.
 
-Intended way to use
-Usage scenario author advice: hands from different sources are processed and stored in two forms: raw copy in Dropbox folder and converted ones in Export folder. **CoinPoker tournaments** (when Copy to Dropbox is on) are merged into raw day files under `CoinPoker/{year}/{month}/` with deduplication by hand id. Source folders are cleared from processed files after that so you don't have third copy of all your hands. Set auto import in H2N3 config to pick up files from export folder automatically. Do not use H2N3's auto import if you don't want your cash games to get into the Dropbox as it will make separate copies of converted ones too with "Archive hand histories into directory" enabled! Use manual import to Hand2Note3 then.
+![Intended way to use](converter/assets/intended_way_to_use.png)
+
+Usage scenario author advice: hands from different sources are processed and stored in two forms: raw copy in Dropbox folder and converted ones in Export folder. Source folders are cleared from processed files after that so you don't have third copy of all your hands. Set auto import in H2N3 config to pick up files from export folder automatically. Do not use H2N3's auto import if you don't want your cash games to get into the Dropbox as it will make separate copies of converted ones too with "Archive hand histories into directory" enabled! Use manual import to Hand2Note3 then.
 
 [Discord](https://discord.gg/AKRS7YFaw)
 

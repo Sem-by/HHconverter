@@ -5,11 +5,6 @@ from datetime import datetime
 
 from converter.time_et import parse_header_timestamp
 
-COIN_H2N_TOURNAMENT_NAME = "Freeroll Hold'em No Limit"
-_COIN_H2N_HEADER_RE = re.compile(
-    r"(PokerStars Hand #\d+: Tournament #\d+, ).+?( - Level)"
-)
-
 _SHOWDOWN_RE = re.compile(r"\*\*\* SHOWDOWN \*\*\*")
 _EMPTY_DEALT_RE = re.compile(r"^Dealt to \S+\s*$")
 
@@ -42,15 +37,6 @@ _SUMMARY_DIDNT_SHOW_RE = re.compile(
 _SUMMARY_MONEY_RE = re.compile(rf"\({_MONEY}\)")
 _TOURNAMENT_TITLE_RE = re.compile(r"^₮[\d.]+\s+")
 _CURRENCY_PREFIX_RE = re.compile(r"[₮$€]")
-
-
-def apply_coin_h2n_header(header_line: str) -> str:
-    """Match Hand2Note Coin module headers (always ``Freeroll Hold'em No Limit``)."""
-    return _COIN_H2N_HEADER_RE.sub(
-        rf"\1{COIN_H2N_TOURNAMENT_NAME}\2",
-        header_line,
-        count=1,
-    )
 
 
 def format_stakes_int(value: float) -> str:
