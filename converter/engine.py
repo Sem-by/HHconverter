@@ -14,7 +14,7 @@ from converter.coin_convert import (
 )
 from converter.eight88_convert import Eight88Converter, eight88_group_key
 from converter.dropbox_mirror import (
-    add_coin_dropbox_hands,
+    add_coin_dropbox_raw_hands,
     copy_room_export,
     copy_summary_file,
     flush_coin_dropbox_copies,
@@ -25,6 +25,7 @@ from converter.dropbox_mirror import (
 )
 from converter.export_names import export_filename, tournament_meta_from_blocks
 from converter.gg_convert import GGPokerConverter
+from converter.gg_filter import is_gg_promotional_hand
 from converter.import_state import (
     FolderWatchState,
     ImportWatchStore,
@@ -48,10 +49,6 @@ from converter.zip_import import (
     list_import_zips,
     zip_looks_like_hand_history,
 )
-
-# Temporary: set True to resume CoinPoker tournament Dropbox copies (cash stays off).
-_COIN_DROPBOX_ENABLED = False
-
 
 def process_all(cfg: Settings, console_print: bool = True) -> None:
     cfg.export_path.mkdir(parents=True, exist_ok=True)
@@ -449,6 +446,10 @@ def _convert_import_file(
             if console_print:
                 print(f"[skip-block] Unknown room in {path.name}:\n{first!r}")
             continue
+        if room == "ggpoker_ok" and is_gg_promotional_hand(block):
+            if console_print:
+                print(f"[skip-block] GG promotional in {path.name}:\n{first!r}")
+            continue
         pairs.append((room, block))
 
     if not pairs:
@@ -538,23 +539,14 @@ def _convert_import_file(
 
         if cfg.dropbox_mode == "original":
             if room == "coinpoker":
-                # Temporary: disable all CoinPoker Dropbox copies.
-                # When re-enabled: tournaments only — never cash.
-                if _COIN_DROPBOX_ENABLED:
-                    cash = bool(raw_bodies and is_coin_cash_hand(raw_bodies[0]))
-                    if not cash:
-                        dropbox_bodies = converted_bodies
-                        if cfg.coin_as_ps:
-                            dropbox_bodies = CoinPokerConverter(
-                                cfg.player_alias,
-                                coin_as_ps=False,
-                            ).convert_file_blocks(raw_bodies)
-                        add_coin_dropbox_hands(
-                            coin_dropbox_buffers,
-                            meta.played_on,
-                            dropbox_bodies,
-                            cash=False,
-                        )
+                # Tournaments only — raw hands merged into CoinPoker/{year}/{month}/ day files.
+                cash = bool(raw_bodies and is_coin_cash_hand(raw_bodies[0]))
+                if not cash:
+                    add_coin_dropbox_raw_hands(
+                        coin_dropbox_buffers,
+                        raw_bodies,
+                        cash=False,
+                    )
             else:
                 original_payload = "\n\n".join(raw_bodies).rstrip() + "\n"
                 with tempfile.NamedTemporaryFile(

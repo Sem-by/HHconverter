@@ -7,13 +7,14 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
-from converter.coin_convert import is_coin_cash_hand
-from converter.coin_format import apply_coin_h2n_header
+from converter.coin_convert import coin_hand_played_on
 from converter.export_names import TournamentMeta
 from converter.settings import Settings, is_path_set
+from converter.split_hands import iter_hand_blocks
 
 _FILENAME_DATE_RE = re.compile(r"(\d{4})[_\-.](\d{1,2})[_\-.](\d{1,2})")
 _SUMMARY_YEAR_RE = re.compile(r"^(?:GG|UP)(\d{4})", re.I)
+_COIN_HAND_ID_RE = re.compile(r"CoinPoker\s+Hand\s+#(\d+)", re.I)
 
 
 def coin_dropbox_filename(played_on: date, *, cash: bool = False) -> str:
@@ -21,31 +22,48 @@ def coin_dropbox_filename(played_on: date, *, cash: bool = False) -> str:
     return f"CoinPoker_{kind}{played_on.year}_{played_on.month}_{played_on.day}_0.txt"
 
 
-def coin_dropbox_hand_text(hand: str) -> str:
-    lines = hand.splitlines()
-    if not lines:
-        return hand
-    # Cash hands stay as PokerStars cash; tournament Dropbox uses H2N Freeroll title.
-    if "Hold'em No Limit ($" in lines[0] or "Hold'em No Limit (€" in lines[0]:
-        return hand
-    if is_coin_cash_hand(hand):
-        return hand
-    lines[0] = apply_coin_h2n_header(lines[0])
-    return "\n".join(lines)
-
-
 def new_coin_dropbox_buffers() -> dict[tuple[date, bool], list[str]]:
     return defaultdict(list)
 
 
-def add_coin_dropbox_hands(
+def add_coin_dropbox_raw_hands(
     buffers: dict[tuple[date, bool], list[str]],
-    played_on: date,
     hands: list[str],
     *,
     cash: bool = False,
 ) -> None:
-    buffers[(played_on, cash)].extend(coin_dropbox_hand_text(hand) for hand in hands)
+    """Buffer raw CoinPoker hands keyed by each hand's play date."""
+    for hand in hands:
+        text = hand.strip()
+        if not text:
+            continue
+        played_on = coin_hand_played_on(text)
+        buffers[(played_on, cash)].append(text)
+
+
+def merge_coin_dropbox_hands(existing: list[str], incoming: list[str]) -> list[str]:
+    """Merge day files; incoming hands replace existing ones with the same hand id."""
+    merged: dict[str, str] = {}
+    anonymous: list[str] = []
+    for block in existing:
+        text = block.strip()
+        if not text:
+            continue
+        hand_id = _coin_hand_id(text)
+        if hand_id:
+            merged[hand_id] = text
+        else:
+            anonymous.append(text)
+    for block in incoming:
+        text = block.strip()
+        if not text:
+            continue
+        hand_id = _coin_hand_id(text)
+        if hand_id:
+            merged[hand_id] = text
+        else:
+            anonymous.append(text)
+    return list(merged.values()) + anonymous
 
 
 def flush_coin_dropbox_copies(
@@ -58,16 +76,29 @@ def flush_coin_dropbox_copies(
         return
 
     for played_on, cash in sorted(hands_by_key):
-        hands = hands_by_key[(played_on, cash)]
-        if not hands:
+        incoming = hands_by_key[(played_on, cash)]
+        if not incoming:
             continue
         dest_dir = _coin_dropbox_dest_dir(cfg, played_on)
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest_file = dest_dir / coin_dropbox_filename(played_on, cash=cash)
-        payload = "\n\n".join(hands).rstrip() + "\n"
-        dest_file.write_text(payload, encoding="utf-8")
+        existing: list[str] = []
+        if dest_file.is_file():
+            existing = list(iter_hand_blocks(dest_file))
+        merged = merge_coin_dropbox_hands(existing, incoming)
+        dest_file.write_text("\n\n".join(merged).rstrip() + "\n", encoding="utf-8")
         if console_print:
-            print(f"[dropbox] {dest_file} ({len(hands)} hand(s))")
+            added = len(incoming)
+            print(
+                f"[dropbox] {dest_file} ({len(merged)} hand(s)"
+                f"{f', +{added} new' if added else ''})"
+            )
+
+
+def _coin_hand_id(block: str) -> str | None:
+    header = block.splitlines()[0].strip() if block.splitlines() else block.strip()
+    match = _COIN_HAND_ID_RE.search(header)
+    return match.group(1) if match else None
 
 
 def mirror_chico_import(cfg: Settings, *, console_print: bool) -> list[Path]:

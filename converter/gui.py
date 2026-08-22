@@ -60,7 +60,7 @@ Hand History Converter
    • Export folder — converted output (default: export/)
    • Clear Import folder after converting — removes source .txt/.zip files when done (after Dropbox copy, if enabled)
    • Coin hands as PS - export CoinPoker as PokerStars (for Hand2Note without Pro/Asia subscription)
-   • Copy to Dropbox — mirrors raw PP / GG / UP / 888 / Chico hands to Dropbox; shows Dropbox and optional Chico folders
+   • Copy to Dropbox — mirrors raw PP / GG / UP / 888 / Chico / CoinPoker hands to Dropbox; shows Dropbox and optional Chico folders
    • Import from folders — also watch PokerPlanets, 888poker, and Downloads folders for new files only
    • Clear folders after import — with "Copy to Dropbox" on, delete only processed files from watched folders after copy (never deletes Chico originals, unprocessed or pre–first-run Downloads files)
    • Nickname — hero name in converted GG / UP / Coin hands (default: Hero)
@@ -70,7 +70,7 @@ Hand History Converter
 3. Click Convert.
    • Converted files are written to Export.
    • .zip hand histories are unpacked and converted; with Copy to Dropbox, tournament summaries from separate zips go to Dropbox …/year/summaries.
-   • With Copy to Dropbox: PP / GG / UP / 888 raw files go to Dropbox.
+   • With Copy to Dropbox: PP / GG / UP / 888 / Chico / CoinPoker raw files go to Dropbox.
    • Chico .txt files copy unchanged to Dropbox (if set); originals in the Chico folder are kept.
    • Import from folders: only new files since the last run are processed. Downloads files older than the app's first-run date are ignored to avoid duplicates already in the Hand2Note database. Import those via the Import folder manually if needed.
    • If you don't want your cash hands to get into the Dropbox do not use H2N3's auto import!
@@ -84,7 +84,7 @@ Hand History Converter
    • Папка Export — сконвертированные файлы (по умолчанию: export/)
    • Очистить папку Import после конвертации — удаляет исходные .txt/.zip после завершения (после копирования в Dropbox, если включено)
    • Coin hands as PS — экспорт CoinPoker в формате PokerStars (для Hand2Note без подписки Pro/Asia)
-   • Копировать в Dropbox — копирует исходные PP / GG / UP / 888 / Chico в Dropbox; открывает поля Dropbox и Chico (необязательно)
+   • Копировать в Dropbox — копирует исходные PP / GG / UP / 888 / Chico / CoinPoker в Dropbox; открывает поля Dropbox и Chico (необязательно)
    • Импорт из папок — также следит за папками PokerPlanets, 888poker и Downloads (только новые файлы)
    • Очистить папки после импорта — при включённом Dropbox удаляет только обработанные файлы из доп. папок (не удаляет оригиналы Chico, необработанные и файлы Downloads старше даты первого запуска)
    • Никнейм — имя героя в конвертированных раздачах GG / UP / Coin (по умолчанию: Hero)
@@ -94,7 +94,7 @@ Hand History Converter
 3. Нажмите Convert.
    • Сконвертированные файлы сохраняются в Export.
    • Архивы .zip с раздачами распаковываются; при копировании в Dropbox саммари из отдельных zip попадают в …/year/summaries.
-   • При копировании в Dropbox: исходные PP / GG / UP / 888 копируются в Dropbox.
+   • При копировании в Dropbox: исходные PP / GG / UP / 888 / Chico / CoinPoker копируются в Dropbox.
    • Файлы Chico копируются в Dropbox без изменений (если указана папка); оригиналы в папке Chico не удаляются.
    • Импорт из папок обрабатывает только новые файлы с прошлого запуска. Файлы в Downloads старше даты первого запуска приложения игнорируются, чтобы не дублировать раздачи уже в базе Hand2Note. При необходимости импортируйте их вручную через папку Import.
    • Если не хотите, чтобы кэш-раздачи попадали в Dropbox, не используйте автоимпорт H2N3!
@@ -108,7 +108,7 @@ Hand History Converter
    • Папка Export — сконвертовані файли (за замовчуванням: export/)
    • Очистити папку Import після конвертації — видаляє вихідні .txt/.zip після завершення (після копіювання в Dropbox, якщо увімкнено)
    • Coin hands as PS — експорт CoinPoker у форматі PokerStars (для Hand2Note без підписки Pro/Asia)
-   • Копіювати в Dropbox — копіює вихідні PP / GG / UP / 888 / Chico у Dropbox; показує поля Dropbox і Chico (необов'язково)
+   • Копіювати в Dropbox — копіює вихідні PP / GG / UP / 888 / Chico / CoinPoker у Dropbox; показує поля Dropbox і Chico (необов'язково)
    • Імпорт з папок — також стежить за папками PokerPlanets, 888poker і Downloads (лише нові файли)
    • Очистити папки після імпорту — з увімкненим Dropbox видаляє лише оброблені файли з додаткових папок (не видаляє оригінали Chico, необроблені та файли Downloads старші за дату першого запуску)
    • Нікнейм — ім'я героя в сконвертованих роздачах GG / UP / Coin (за замовчуванням: Hero)
@@ -118,7 +118,7 @@ Hand History Converter
 3. Натисніть Convert.
    • Сконвертовані файли зберігаються в Export.
    • Архіви .zip з роздачами розпаковуються; з Copy to Dropbox самарі з окремих zip потрапляють у …/year/summaries.
-   • Якщо увімкнено копіювання в Dropbox: вихідні PP / GG / UP / 888 копіюються в Dropbox.
+   • Якщо увімкнено копіювання в Dropbox: вихідні PP / GG / UP / 888 / Chico / CoinPoker копіюються в Dropbox.
    • Файли Chico копіюються в Dropbox без змін (якщо вказано папку); оригінали в папці Chico не видаляються.
    • Імпорт з папок обробляє лише нові файли з попереднього запуску. Файли в Downloads старші за дату першого запуску програми ігноруються, щоб уникнути дублікатів уже в базі Hand2Note. За потреби імпортуйте їх вручну через папку Import.
    • Якщо не хочете, щоб кеш-роздачі потрапляли в Dropbox, не використовуйте автоімпорт H2N3!
@@ -132,7 +132,7 @@ Hand History Converter
    • Export қалтасы — түрлендірілген шығыс (әдепкі: export/)
    • Түрлендіргеннен кейін Import қалтасын тазарту — аяқталғаннан кейін бастапқы .txt/.zip файлдарын жояды (Dropbox көшіруінен кейін, егер қосулы болса)
    • Coin hands as PS — CoinPoker-ді PokerStars форматында экспорттау (Pro/Asia жазылымы жоқ Hand2Note үшін)
-   • Dropbox-қа көшіру — PP / GG / UP / 888 / Chico бастапқы файлдарын Dropbox-қа көшіреді; Dropbox және Chico өрістерін көрсетеді
+   • Dropbox-қа көшіру — PP / GG / UP / 888 / Chico / CoinPoker бастапқы файлдарын Dropbox-қа көшіреді; Dropbox және Chico өрістерін көрсетеді
    • Қалталардан импорт — PokerPlanets, 888poker және Downloads қалталарын қадағалайды (тек жаңа файлдар)
    • Импорттан кейін қалталарды тазарту — Dropbox қосулы болса, тек өңделген файлдарды қосымша қалталардан жояды (Chico түпнұсқаларын, өңделмеген және бірінші іске қосу күнінен бұрынғы Downloads файлдарын жоймайды)
    • Лақап аты — түрлендірілген GG / UP / Coin раздачаларындағы кейіпкер аты (әдепкі: Hero)
@@ -142,7 +142,7 @@ Hand History Converter
 3. Convert түймесін басыңыз.
    • Түрлендірілген файлдар Export-қа жазылады.
    • .zip раздачалар шығарылады; Dropbox-қа көшіру қосулы болса summary zip-тер …/year/summaries-қа түседі.
-   • Dropbox-қа көшіру қосулы болса: PP / GG / UP / 888 бастапқы файлдары көшіріледі.
+   • Dropbox-қа көшіру қосулы болса: PP / GG / UP / 888 / Chico / CoinPoker бастапқы файлдары Dropbox-қа көшіріледі.
    • Chico .txt файлдары Dropbox-қа өзгеріссіз көшіріледі (егер орнатылса); Chico қалтасындағы түпнұсқалар сақталады.
    • Қалталардан импорт тек соңғы іске қосудан бергі жаңа файлдарды өңдейді. Downloads-тағы қолданбаның бірінші іске қосу күнінен бұрынғы файлдар елемейді (Hand2Note дерекқорындағы қайталауларды болдырмау үшін). Қажет болса, оларды Import қалтасы арқылы қолмен импорттаңыз.
    • Кэш раздачалардың Dropbox-қа түсуін қаламасаңыз, H2N3 автоимпортын пайдаланбаңыз!
@@ -156,7 +156,7 @@ Convertisseur d'historiques de mains
    • Dossier Export — fichiers convertis (par défaut : export/)
    • Vider le dossier Import après conversion — supprime les .txt/.zip sources une fois terminé (après copie Dropbox, si activée)
    • Coin hands as PS — export CoinPoker en PokerStars (pour Hand2Note sans abonnement Pro/Asia)
-   • Copier vers Dropbox — copie les mains brutes PP / GG / UP / 888 / Chico vers Dropbox ; affiche les dossiers Dropbox et Chico (optionnel)
+   • Copier vers Dropbox — copie les mains brutes PP / GG / UP / 888 / Chico / CoinPoker vers Dropbox ; affiche les dossiers Dropbox et Chico (optionnel)
    • Importer depuis des dossiers — surveille aussi PokerPlanets, 888poker et Downloads (nouveaux fichiers seulement)
    • Vider les dossiers après import — avec Dropbox, supprime uniquement les fichiers traités des dossiers surveillés (ne supprime jamais les originaux Chico, ni les fichiers Downloads non traités / antérieurs à la date de première exécution)
    • Pseudo — nom du héros dans les mains GG / UP / Coin converties (par défaut : Hero)
@@ -166,7 +166,7 @@ Convertisseur d'historiques de mains
 3. Cliquez sur Convert.
    • Les fichiers convertis sont écrits dans Export.
    • Les .zip de mains sont décompressés ; avec Dropbox, les résumés vont dans …/year/summaries.
-   • Avec Copier vers Dropbox : les fichiers bruts PP / GG / UP / 888 vont dans Dropbox.
+   • Avec Copier vers Dropbox : les fichiers bruts PP / GG / UP / 888 / Chico / CoinPoker vont dans Dropbox.
    • Les .txt Chico sont copiés vers Dropbox tels quels (si défini) ; les originaux du dossier Chico sont conservés.
    • Import depuis dossiers : seuls les nouveaux fichiers depuis la dernière exécution sont traités. Les fichiers Downloads antérieurs à la date de première exécution de l'appli sont ignorés pour éviter les doublons déjà dans Hand2Note. Importez-les via Import manuellement si besoin.
    • Si vous ne voulez pas que vos mains cash aillent dans Dropbox, n'utilisez pas l'import auto de H2N3 !
@@ -180,7 +180,7 @@ Convertidor de historiales de manos
    • Carpeta Export — archivos convertidos (predeterminado: export/)
    • Vaciar carpeta Import tras convertir — elimina los .txt/.zip originales al terminar (tras la copia a Dropbox, si está activa)
    • Coin hands as PS — exportar CoinPoker como PokerStars (para Hand2Note sin suscripción Pro/Asia)
-   • Copiar a Dropbox — copia las manos PP / GG / UP / 888 / Chico sin convertir a Dropbox; muestra carpetas Dropbox y Chico (opcional)
+   • Copiar a Dropbox — copia las manos PP / GG / UP / 888 / Chico / CoinPoker sin convertir a Dropbox; muestra carpetas Dropbox y Chico (opcional)
    • Importar desde carpetas — también vigila PokerPlanets, 888poker y Downloads (solo archivos nuevos)
    • Vaciar carpetas tras importar — con Dropbox, borra solo archivos procesados de carpetas vigiladas (no borra originales de Chico, ni archivos de Downloads no procesados / anteriores a la fecha del primer uso)
    • Apodo — nombre del héroe en manos GG / UP / Coin convertidas (predeterminado: Hero)
@@ -190,7 +190,7 @@ Convertidor de historiales de manos
 3. Haga clic en Convert.
    • Los archivos convertidos se guardan en Export.
    • Los .zip de manos se descomprimen; con Dropbox, los summaries van a …/year/summaries.
-   • Con Copiar a Dropbox: los archivos PP / GG / UP / 888 sin convertir van a Dropbox.
+   • Con Copiar a Dropbox: los archivos PP / GG / UP / 888 / Chico / CoinPoker sin convertir van a Dropbox.
    • Los .txt de Chico se copian a Dropbox sin cambios (si está configurado); los originales en la carpeta Chico se conservan.
    • Importar desde carpetas solo procesa archivos nuevos desde la última ejecución. Los archivos de Downloads anteriores a la fecha del primer uso de la app se ignoran para evitar duplicados ya en Hand2Note. Impórtelos manualmente por Import si hace falta.
    • Si no quiere que sus manos de cash lleguen a Dropbox, no use la importación automática de H2N3.
@@ -204,7 +204,7 @@ Konwerter historii rozdań
    • Folder Export — przekonwertowane pliki (domyślnie: export/)
    • Wyczyść folder Import po konwersji — usuwa źródłowe .txt/.zip po zakończeniu (po kopii do Dropbox, jeśli włączona)
    • Coin hands as PS — eksport CoinPoker jako PokerStars (dla Hand2Note bez subskrypcji Pro/Asia)
-   • Kopiuj do Dropbox — kopiuje surowe PP / GG / UP / 888 / Chico do Dropbox; pokazuje foldery Dropbox i Chico (opcjonalnie)
+   • Kopiuj do Dropbox — kopiuje surowe PP / GG / UP / 888 / Chico / CoinPoker do Dropbox; pokazuje foldery Dropbox i Chico (opcjonalnie)
    • Import z folderów — także obserwuje PokerPlanets, 888poker i Downloads (tylko nowe pliki)
    • Wyczyść foldery po imporcie — przy Dropbox usuwa tylko przetworzone pliki z obserwowanych folderów (nie usuwa oryginałów Chico, nieprzetworzonych ani plików Downloads starszych niż data pierwszego uruchomienia)
    • Pseudonim — nazwa bohatera w przekonwertowanych rozdanach GG / UP / Coin (domyślnie: Hero)
@@ -214,7 +214,7 @@ Konwerter historii rozdań
 3. Kliknij Convert.
    • Przekonwertowane pliki są zapisywane w Export.
    • Archiwa .zip z rozdaniami są rozpakowywane; przy Dropbox summary trafiają do …/year/summaries.
-   • Przy Kopiuj do Dropbox: surowe PP / GG / UP / 888 trafiają do Dropbox.
+   • Przy Kopiuj do Dropbox: surowe PP / GG / UP / 888 / Chico / CoinPoker trafiają do Dropbox.
    • Pliki Chico .txt kopiowane do Dropbox bez zmian (jeśli ustawione); oryginały w folderze Chico pozostają.
    • Import z folderów przetwarza tylko nowe pliki od ostatniego uruchomienia. Pliki w Downloads starsze niż data pierwszego uruchomienia aplikacji są ignorowane, aby uniknąć duplikatów już w bazie Hand2Note. W razie potrzeby zaimportuj je ręcznie przez folder Import.
    • Jeśli nie chcesz, żeby rozdania cash trafiały do Dropbox, nie używaj autoimportu H2N3!

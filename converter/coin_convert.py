@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date
 
 from converter.coin_format import (
     clean_tournament_title,
@@ -145,6 +146,19 @@ def _cash_played_on(time_part: str) -> str:
     if dt is None:
         raise ValueError(f"Could not parse cash date from: {time_part!r}")
     return dt.date().isoformat()
+
+
+def coin_hand_played_on(block: str) -> date:
+    """Play date for a single CoinPoker hand block (used for Dropbox day files)."""
+    lines = block.splitlines()
+    if not lines:
+        raise ValueError("empty CoinPoker hand")
+    header = lines[0].strip()
+    cleaned = strip_existing_et_brackets(header.rstrip())
+    dt = parse_header_timestamp(cleaned)
+    if dt is None:
+        raise ValueError(f"Could not parse CoinPoker hand date from: {header!r}")
+    return dt.date()
 
 
 def coin_h2n_tournament_title(title_raw: str, max_seats: str) -> str:
