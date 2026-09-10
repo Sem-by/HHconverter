@@ -24,7 +24,7 @@ from converter.dropbox_mirror import (
     year_from_summary_name,
 )
 from converter.export_names import export_filename, tournament_meta_from_blocks
-from converter.gg_convert import GGPokerConverter
+from converter.gg_convert import GGPokerConverter, gg_group_key
 from converter.gg_filter import is_gg_promotional_hand
 from converter.import_state import (
     FolderWatchState,
@@ -42,6 +42,7 @@ from converter.pp_hero import detect_pp_hero_token
 from converter.settings import SOURCE_HERO_TOKEN, Settings, is_path_set
 from converter.split_hands import detect_room_from_first_line, iter_hand_blocks
 from converter.up_convert import UPpokerConverter
+from converter.win1_convert import OneWinConverter, onewin_group_key
 from converter.zip_import import (
     classify_zip,
     extract_zip_member,
@@ -239,6 +240,7 @@ def _collect_import_txt_files(
         watched_txt: list[tuple[Path | None, bool, int | None]] = [
             (cfg.poker_planets_folder, True, None),
             (cfg.eight88_folder, True, None),
+            (cfg.onewin_folder, True, None),
             (cfg.downloads_folder, False, downloads_min_mtime_ns),
         ]
         for folder, recursive, min_mtime in watched_txt:
@@ -461,16 +463,21 @@ def _convert_import_file(
     grouped_raw: dict[tuple[str, str], list[str]] = defaultdict(list)
 
     pp_blocks = [block for room, block in pairs if room == "poker_planets"]
-    gg_blocks = [block for room, block in pairs if room == "ggpoker_ok"]
     up_blocks = [block for room, block in pairs if room == "uppoker"]
+    gg_by_key: dict[str, list[str]] = defaultdict(list)
     coin_by_key: dict[str, list[str]] = defaultdict(list)
     eight88_by_key: dict[str, list[str]] = defaultdict(list)
+    onewin_by_key: dict[str, list[str]] = defaultdict(list)
 
     for room, block in pairs:
-        if room == "coinpoker":
+        if room == "ggpoker_ok":
+            gg_by_key[gg_group_key(block)].append(block)
+        elif room == "coinpoker":
             coin_by_key[coin_group_key(block)].append(block)
         elif room == "888poker":
             eight88_by_key[eight88_group_key(block)].append(block)
+        elif room == "onewin":
+            onewin_by_key[onewin_group_key(block)].append(block)
 
     if pp_blocks:
         pp_converter = PokerPlanetsConverter()
@@ -483,16 +490,17 @@ def _convert_import_file(
             grouped_converted[("poker_planets", "")].append(converted)
         grouped_raw[("poker_planets", "")].extend(pp_blocks)
 
-    if gg_blocks:
+    if gg_by_key:
         gg_converter = GGPokerConverter()
-        for converted in gg_converter.convert_file_blocks(gg_blocks):
-            converted = replace_seat_token(
-                converted,
-                SOURCE_HERO_TOKEN,
-                cfg.player_alias,
-            )
-            grouped_converted[("ggpoker_ok", "")].append(gg_postprocess(converted))
-        grouped_raw[("ggpoker_ok", "")].extend(gg_blocks)
+        for key, blocks in gg_by_key.items():
+            for converted in gg_converter.convert_file_blocks(blocks):
+                converted = replace_seat_token(
+                    converted,
+                    SOURCE_HERO_TOKEN,
+                    cfg.player_alias,
+                )
+                grouped_converted[("ggpoker_ok", key)].append(gg_postprocess(converted))
+            grouped_raw[("ggpoker_ok", key)].extend(blocks)
 
     if up_blocks:
         up_converter = UPpokerConverter()
@@ -524,6 +532,14 @@ def _convert_import_file(
                 coin_converter.convert_file_blocks(blocks)
             )
             grouped_raw[("coinpoker", key)].extend(blocks)
+
+    if onewin_by_key:
+        onewin_converter = OneWinConverter()
+        for key, blocks in onewin_by_key.items():
+            grouped_converted[("onewin", key)].extend(
+                onewin_converter.convert_file_blocks(blocks)
+            )
+            grouped_raw[("onewin", key)].extend(blocks)
 
     writes = 0
     for key in grouped_converted:

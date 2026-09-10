@@ -97,7 +97,8 @@ def _format_amount(amount: str, *, currency: str) -> str:
 
 
 def format_coin_body_line(line: str) -> str | None:
-    return _format_body_line(line, currency="€")
+    """Tournament CPR_ path: chips as bare numbers (no room-currency glyph)."""
+    return _format_body_line(line, currency="")
 
 
 def format_ps_body_line(line: str) -> str | None:

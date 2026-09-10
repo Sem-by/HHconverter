@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from converter.i18n import DEFAULT_LANGUAGE, normalize_language
+
 DropboxMode = Literal["original", "none"]
 _DROPBOX_MODES: frozenset[str] = frozenset({"original", "none"})
 SOURCE_HERO_TOKEN = "Hero"
@@ -26,8 +28,10 @@ class Settings:
     import_from_folders: bool
     poker_planets_folder: Path | None
     eight88_folder: Path | None
+    onewin_folder: Path | None
     downloads_folder: Path | None
     clear_folders_after_import: bool
+    ui_language: str
 
 
 def program_base() -> Path:
@@ -65,8 +69,10 @@ def default_settings() -> Settings:
         import_from_folders=False,
         poker_planets_folder=None,
         eight88_folder=None,
+        onewin_folder=None,
         downloads_folder=None,
         clear_folders_after_import=False,
+        ui_language=DEFAULT_LANGUAGE,
     )
 
 
@@ -121,8 +127,10 @@ def load_settings(config_path: Path) -> Settings:
         import_from_folders=import_from_folders,
         poker_planets_folder=_optional_path(data.get("poker_planets_folder")),
         eight88_folder=_optional_path(data.get("eight88_folder")),
+        onewin_folder=_optional_path(data.get("onewin_folder")),
         downloads_folder=_optional_path(data.get("downloads_folder")),
         clear_folders_after_import=clear_folders,
+        ui_language=normalize_language(str(data.get("ui_language", DEFAULT_LANGUAGE))),
     )
 
 
@@ -153,10 +161,14 @@ def save_settings(config_path: Path, settings: Settings) -> None:
     data["eight88_folder"] = (
         _path_str(settings.eight88_folder) if settings.eight88_folder else None
     )
+    data["onewin_folder"] = (
+        _path_str(settings.onewin_folder) if settings.onewin_folder else None
+    )
     data["downloads_folder"] = (
         _path_str(settings.downloads_folder) if settings.downloads_folder else None
     )
     data["clear_folders_after_import"] = settings.clear_folders_after_import
+    data["ui_language"] = normalize_language(settings.ui_language)
     data.pop("room_seat_tokens", None)
 
     config_path.parent.mkdir(parents=True, exist_ok=True)

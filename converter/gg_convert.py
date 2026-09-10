@@ -5,7 +5,7 @@ from collections.abc import Callable
 
 from converter.hand_ids import gg_display_hand_id
 from converter.normalize import restore_poker_hand_header_colon
-from converter.time_et import append_utc_bracket_et, normalize_level_piece
+from converter.time_et import append_utc_bracket_et, normalize_level_piece, parse_header_timestamp
 
 _POKER_HAND_HEADER_RE = re.compile(r"Poker\s+Hand\s+#([^\s:]+)\s*:\s*(.+)")
 _EMPTY_DEALT_RE = re.compile(r"^Dealt to \S+\s*$")
@@ -17,6 +17,13 @@ _TOURNAMENT_ID_RE = re.compile(r"(Tournament #)(\d+)")
 _TABLE_LINE_RE = re.compile(
     r"^Table '([^']*)' (\d+)-max Seat #(\d+) is the button\s*$"
 )
+_CASH_STAKES_RE = re.compile(
+    r"Hold'?em\s+No\s+Limit\s+\(\s*\$?([\d,.]+)\s*/\s*\$?([\d,.]+)\s*\)",
+    re.I,
+)
+_CASHOUT_RE = re.compile(
+    r"(?i)^\S+:\s*(?:Chooses to EV Cashout|Pays Cashout Risk\b)"
+)
 
 # Hand2Note room table prefixes (clkClubGG.exe room map):
 # ClubGG -> CGG_, GG Network -> GG_
@@ -27,8 +34,32 @@ _HAND_ID_FN = {
 }
 
 
+def is_gg_cash_hand(block: str) -> bool:
+    lines = block.splitlines()
+    if not lines:
+        return False
+    header = restore_poker_hand_header_colon(lines[0].strip())
+    if re.search(r"Tournament\s+#", header, re.I):
+        return False
+    return bool(_CASH_STAKES_RE.search(header))
+
+
+def gg_group_key(block: str) -> str:
+    """Tournament id, or cash stakes+date for export splitting."""
+    if is_gg_cash_hand(block):
+        header = restore_poker_hand_header_colon(block.splitlines()[0].strip())
+        stakes = _CASH_STAKES_RE.search(header)
+        sb = stakes.group(1) if stakes else "?"
+        bb = stakes.group(2) if stakes else "?"
+        dt = parse_header_timestamp(header)
+        played = dt.date().isoformat() if dt else "unknown-date"
+        return f"cash|{played}|{sb}|{bb}"
+    m = _TOURNAMENT_ID_RE.search(block.splitlines()[0] if block.splitlines() else "")
+    return m.group(2) if m else "unknown"
+
+
 class PokerHandConverter:
-    """Convert GGPoker / UPpoker ``Poker Hand #`` blocks to PokerStars format."""
+    """Convert GGPoker ``Poker Hand #`` blocks to PokerStars format."""
 
     def __init__(self, room: str) -> None:
         if room not in _HAND_ID_FN:
@@ -51,6 +82,7 @@ class PokerHandConverter:
 
         hid = self._hand_id_fn(m.group(1))
         tail = normalize_level_piece(m.group(2).strip())
+        cash = is_gg_cash_hand(block)
 
         err, tail = append_utc_bracket_et(tail)
         if err:
@@ -59,16 +91,24 @@ class PokerHandConverter:
         header = f"PokerStars Hand #{hid}: {tail}"
         body: list[str] = []
         for line in lines[1:]:
+            if _CASHOUT_RE.match(line.strip()):
+                continue
             table_m = _TABLE_LINE_RE.match(line.strip())
             if table_m and not body:
-                tid = _extract_tournament_id(tail)
                 table_id = table_m.group(1)
                 max_seats = table_m.group(2)
                 button = table_m.group(3)
-                line = (
-                    f"Table '{_GG_TABLE_PREFIX}{tid} {table_id}' "
-                    f"{max_seats}-max Seat #{button} is the button"
-                )
+                if cash:
+                    line = (
+                        f"Table '{_GG_TABLE_PREFIX}{table_id}' "
+                        f"{max_seats}-max Seat #{button} is the button"
+                    )
+                else:
+                    tid = _extract_tournament_id(tail)
+                    line = (
+                        f"Table '{_GG_TABLE_PREFIX}{tid} {table_id}' "
+                        f"{max_seats}-max Seat #{button} is the button"
+                    )
 
             line = _strip_empty_dealt_line(line)
             if line is None:

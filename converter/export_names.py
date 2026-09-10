@@ -7,10 +7,16 @@ from datetime import date
 from converter.coin_convert import coin_tournament_id, is_coin_cash_hand
 from converter.coin_format import clean_tournament_title, format_stakes_int, normalize_money
 from converter.eight88_convert import eight88_tournament_meta
+from converter.gg_convert import is_gg_cash_hand
 from converter.hand_ids import up_display_tournament_id
 from converter.normalize import restore_poker_hand_header_colon
 from converter.pp_format import parse_pp_tournament_header
 from converter.time_et import parse_header_timestamp, strip_existing_et_brackets
+from converter.win1_convert import (
+    is_onewin_cash_hand,
+    onewin_cash_meta,
+    onewin_tournament_meta,
+)
 
 _ROOM_ABBREV = {
     "poker_planets": "PP",
@@ -18,12 +24,17 @@ _ROOM_ABBREV = {
     "uppoker": "UP",
     "coinpoker": "Coin",
     "888poker": "888",
+    "onewin": "1Win",
 }
 
 _PP_HEADER_RE = re.compile(r"PokerPlanets\s+Hand\s+#\d+\s*:\s*(.+)", re.I)
 _GG_HEADER_RE = re.compile(r"Poker\s+Hand\s+#\S+\s*:\s*(.+)", re.I)
 _GG_TOURNAMENT_RE = re.compile(
     r"^Tournament\s+#(\d+),\s*(.+?)\s+Hold'em\b",
+    re.I,
+)
+_GG_CASH_STAKES_RE = re.compile(
+    r"Hold'?em\s+No\s+Limit\s+\(\s*\$?([\d,.]+)\s*/\s*\$?([\d,.]+)\s*\)",
     re.I,
 )
 _COIN_TITLE_RE = re.compile(r"^Tournament\s+'([^']+)'\s+'(\d+)'", re.I | re.M)
@@ -72,13 +83,15 @@ def tournament_meta_from_blocks(room: str, blocks: list[str]) -> TournamentMeta:
     if room == "poker_planets":
         return _pp_meta(first)
     if room == "ggpoker_ok":
-        return _gg_meta(first)
+        return _gg_meta(blocks[0])
     if room == "uppoker":
         return _up_meta(first)
     if room == "coinpoker":
         return _coin_meta(blocks[0])
     if room == "888poker":
         return _888_meta(blocks[0])
+    if room == "onewin":
+        return _onewin_meta(blocks[0])
     raise ValueError(f"Unsupported room for export naming: {room}")
 
 
@@ -98,13 +111,23 @@ def _pp_meta(header: str) -> TournamentMeta:
     return TournamentMeta("poker_planets", tid, price, name, played)
 
 
-def _gg_meta(header: str) -> TournamentMeta:
+def _gg_meta(block_or_header: str) -> TournamentMeta:
+    header = block_or_header.splitlines()[0].strip() if "\n" in block_or_header else block_or_header
     header = restore_poker_hand_header_colon(header)
     m = _GG_HEADER_RE.match(header)
     if not m:
         raise ValueError(f"Unrecognized GG header: {header!r}")
 
     tail = m.group(1).strip()
+    if is_gg_cash_hand(block_or_header if "\n" in block_or_header else header):
+        stakes = _GG_CASH_STAKES_RE.search(tail)
+        if not stakes:
+            raise ValueError(f"Unrecognized GG cash stakes: {tail!r}")
+        sb = format_stakes_int(float(normalize_money(stakes.group(1))))
+        bb = format_stakes_int(float(normalize_money(stakes.group(2))))
+        played = _header_date(tail)
+        return TournamentMeta("ggpoker_ok", f"cash-{sb}-{bb}", f"${sb}-${bb}", "Cash", played)
+
     tm = _GG_TOURNAMENT_RE.match(tail)
     if not tm:
         raise ValueError(f"Unrecognized GG tournament header: {tail!r}")
@@ -137,6 +160,14 @@ def _up_meta(header: str) -> TournamentMeta:
 def _888_meta(block: str) -> TournamentMeta:
     tid, price, name, played = eight88_tournament_meta(block)
     return TournamentMeta("888poker", tid, price, name, date.fromisoformat(played))
+
+
+def _onewin_meta(block: str) -> TournamentMeta:
+    if is_onewin_cash_hand(block):
+        played, sb, bb = onewin_cash_meta(block)
+        return TournamentMeta("onewin", f"cash-{sb}-{bb}", f"${sb}-${bb}", "Cash", played)
+    tid, price, name, played = onewin_tournament_meta(block)
+    return TournamentMeta("onewin", tid, price, name, played)
 
 
 def _coin_meta(block: str) -> TournamentMeta:

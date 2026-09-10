@@ -1,7 +1,7 @@
 [project]
 name = "converter"
-version = "0.4.3"
-description = "Convert multi-room tournament hand histories to PokerStars-style text for Hand2Note"
+version = "0.5.0"
+description = "Convert multi-room tournament and cash hand histories for Hand2Note 3"
 readme = "README.md"
 license = "GPL-3.0-only"
 requires-python = ">=3.11"

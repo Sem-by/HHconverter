@@ -13,8 +13,11 @@
   "import_from_folders": false,
   "poker_planets_folder": null,
   "eight88_folder": null,
+  "onewin_folder": null,
   "downloads_folder": null,
   "clear_folders_after_import": false,
+
+  "ui_language": "en",
 
   "player_alias": "Hero"
 }

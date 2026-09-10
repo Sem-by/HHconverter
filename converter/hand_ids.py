@@ -4,6 +4,8 @@ HAND_PREFIX_GGPOKER = "222222"
 # IEEE-754 doubles (Hand2Note/JS). Keep total length ≤ 14 like GG/UP (12-digit) ids.
 HAND_PREFIX_COINPOKER = "33"
 HAND_PREFIX_UPPOKER = "444444"
+HAND_PREFIX_ONEWIN = "55"
+HAND_PREFIX_GG_CASH = "22"
 
 _GG_ID_SOURCE_PREFIX = "5730"
 _GG_ID_DISPLAY_PREFIX = "205730"
@@ -11,13 +13,20 @@ _GG_ID_DISPLAY_PREFIX = "205730"
 
 def poker_hand_suffix(raw_hand_id: str) -> str:
     suffix = raw_hand_id.strip()
-    if suffix.upper().startswith("TM"):
+    upper = suffix.upper()
+    if upper.startswith("TM"):
+        return suffix[2:]
+    if upper.startswith("HD"):
         return suffix[2:]
     return suffix
 
 
 def detect_poker_hand_room(raw_hand_id: str) -> str:
-    """GGPoker uses numeric ``TM5730…`` ids; UPpoker uses hex ``TM0ED72…`` ids."""
+    """GGPoker: numeric ``TM5730…`` / cash ``HD…``; UPpoker: hex ``TM0ED72…``."""
+    raw = raw_hand_id.strip()
+    upper = raw.upper()
+    if upper.startswith("HD") and upper[2:].isdigit():
+        return "ggpoker_ok"
     suffix = poker_hand_suffix(raw_hand_id)
     if suffix.isdigit():
         return "ggpoker_ok"
@@ -36,11 +45,25 @@ def coin_display_hand_id(raw_hand_id: str) -> str:
 
 
 def gg_display_hand_id(raw_hand_id: str) -> str:
-    """Map GGPoker ``TM5730…`` ids to PokerStars-style ``205730…`` ids for Hand2Note."""
+    """Map GGPoker ``TM5730…`` / cash ``HD…`` ids to PokerStars-style ids for Hand2Note."""
+    raw = raw_hand_id.strip()
+    upper = raw.upper()
+    # Cash: HD3035310615 → 223035310615 (≤14 digits).
+    if upper.startswith("HD") and upper[2:].isdigit():
+        return f"{HAND_PREFIX_GG_CASH}{upper[2:]}"
     suffix = poker_hand_suffix(raw_hand_id)
     if suffix.startswith(_GG_ID_SOURCE_PREFIX):
         return f"{_GG_ID_DISPLAY_PREFIX}{suffix[len(_GG_ID_SOURCE_PREFIX):]}"
     return prefixed_hand_id(HAND_PREFIX_GGPOKER, suffix)
+
+
+def onewin_display_hand_id(raw_hand_id: str) -> str:
+    """1Win numeric ids → prefixed PokerStars-style ids (≤14 digits for H2N/float64)."""
+    digits = "".join(ch for ch in raw_hand_id.strip() if ch.isdigit()) or raw_hand_id.strip()
+    max_suffix = 14 - len(HAND_PREFIX_ONEWIN)
+    if digits.isdigit() and len(digits) > max_suffix:
+        digits = digits[-max_suffix:]
+    return prefixed_hand_id(HAND_PREFIX_ONEWIN, digits)
 
 
 _UP_ID_MAX_DIGITS = 12

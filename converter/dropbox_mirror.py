@@ -136,7 +136,12 @@ def copy_room_export(
     if cfg.dropbox_mode == "none":
         return
 
-    dest_dir = room_hands_dir(cfg, room, meta.played_on.year)
+    dest_dir = room_hands_dir(
+        cfg,
+        room,
+        meta.played_on.year,
+        meta.played_on.month if room == "onewin" else None,
+    )
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_file = dest_dir / (dest_name or source_file.name)
     shutil.copy2(source_file, dest_file)
@@ -163,7 +168,7 @@ def copy_summary_file(
         print(f"[dropbox-summary] {dest_file}")
 
 
-def room_hands_dir(cfg: Settings, room: str, year: int) -> Path:
+def room_hands_dir(cfg: Settings, room: str, year: int, month: int | None = None) -> Path:
     base = cfg.dropbox_base_path
     year_s = str(year)
     if room == "ggpoker_ok":
@@ -176,6 +181,10 @@ def room_hands_dir(cfg: Settings, room: str, year: int) -> Path:
         return base / "CoinPoker" / year_s
     if room == "888poker":
         return base / "888" / "hands" / year_s
+    if room == "onewin":
+        if month is None:
+            return base / "1Win" / year_s
+        return base / "1Win" / year_s / str(month)
     return base / "Misc"
 
 
@@ -202,6 +211,7 @@ def migrate_dropbox_layout(cfg: Settings, *, console_print: bool) -> None:
     _migrate_up_layouts(base, console_print=console_print)
     _migrate_chico_months(base, console_print=console_print)
     _migrate_888_year_to_hands(base, console_print=console_print)
+    _migrate_onewin_year_to_year_month(base, console_print=console_print)
 
 
 def year_from_summary_name(name: str) -> int | None:
@@ -258,6 +268,43 @@ def _migrate_888_year_to_hands(base: Path, *, console_print: bool) -> None:
     ):
         new_dir = base / "888" / "hands" / year_dir.name
         _relocate_dir(year_dir, new_dir, console_print=console_print)
+
+
+def _migrate_onewin_year_to_year_month(base: Path, *, console_print: bool) -> None:
+    """``1Win/{year}/*.txt`` → ``1Win/{year}/{month}/`` (month from filename date)."""
+    root = base / "1Win"
+    if not root.is_dir():
+        return
+    for year_dir in sorted(p for p in root.iterdir() if p.is_dir() and p.name.isdigit()):
+        files = [
+            p
+            for p in year_dir.iterdir()
+            if p.is_file() and p.suffix.lower() == ".txt" and not _is_junk_name(p.name)
+        ]
+        if not files:
+            continue
+        for src in files:
+            month = _month_from_onewin_dropbox_name(src.name) or 0
+            dest_dir = year_dir / str(month)
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest = dest_dir / src.name
+            if dest.exists():
+                if filecmp.cmp(src, dest, shallow=False):
+                    src.unlink(missing_ok=True)
+                continue
+            shutil.move(str(src), str(dest))
+            if console_print:
+                print(f"[dropbox-migrate] {src} -> {dest}")
+
+
+def _month_from_onewin_dropbox_name(name: str) -> int | None:
+    m = re.search(r"(20\d{2})[-_.](\d{1,2})[-_.](\d{1,2})", name)
+    if m:
+        return int(m.group(2))
+    m = _FILENAME_DATE_RE.search(name)
+    if m:
+        return int(m.group(2))
+    return None
 
 
 _JUNK_NAMES = frozenset(

@@ -58,7 +58,6 @@ _COIN_CASH_TABLE_RE = re.compile(
     r"^Table\s+'(.+?)'\s+(\d+)-max\s+Seat\s+#(\d+)\s+is\s+the\s+button\s*$",
     re.I,
 )
-_N_MAX_TITLE_RE = re.compile(r"^\d+-Max\b", re.I)
 _TOURNAMENT_HASH_RE = re.compile(r"Tournament\s+#(\d+)", re.I)
 
 
@@ -162,11 +161,9 @@ def coin_hand_played_on(block: str) -> date:
 
 
 def coin_h2n_tournament_title(title_raw: str, max_seats: str) -> str:
-    """Hand2Note Coin datetime parsing needs ``{N}-Max …`` or ``Freeroll`` in the header title."""
-    title = clean_tournament_title(title_raw)
-    if title.lower().startswith("freeroll") or _N_MAX_TITLE_RE.match(title):
-        return title
-    return f"{max_seats}-Max {title}"
+    """Clean tournament title for CPR_ / Coin-module export (no Freeroll rewrite)."""
+    del max_seats  # kept for call-site compatibility
+    return clean_tournament_title(title_raw) or "Tournament"
 
 
 def _stakes_int(value: float) -> int:
@@ -379,6 +376,8 @@ def _build_hand_h2n(block: str) -> str:
 
     hand_id, sb, bb, _ante, time_part, title_raw, tid, max_seats, button, body_lines = parsed
     title = coin_h2n_tournament_title(title_raw, max_seats)
+    # Avoid ₮ in CPR_ headers (mojibake / H2N surprises); chips stay bare numbers.
+    title = title.replace("₮", "$")
     sb_s = format_stakes_int(sb)
     bb_s = format_stakes_int(bb)
     utc_time = coin_timestamp_to_utc(time_part)

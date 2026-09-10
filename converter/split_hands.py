@@ -9,6 +9,7 @@ from converter.hand_ids import detect_poker_hand_room
 _HAND_START_PREFIXES = (
     "PokerPlanets Hand #",
     "CoinPoker Hand #",
+    "1WinPoker Hand #",
     "Poker Hand #",
     "PokerStars Hand #",
     "***** 888poker Hand History",
@@ -73,6 +74,8 @@ def detect_room_from_first_line(first_line: str) -> str | None:
         return "poker_planets"
     if s.startswith("CoinPoker Hand #"):
         return "coinpoker"
+    if s.startswith("1WinPoker Hand #"):
+        return "onewin"
     if s.startswith("***** 888poker Hand History"):
         return "888poker"
     if _GAME_NO_LINE_RE.match(s):

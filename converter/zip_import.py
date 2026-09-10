@@ -12,6 +12,7 @@ _HAND_START = (
     "Poker Hand #",
     "PokerPlanets Hand #",
     "CoinPoker Hand #",
+    "1WinPoker Hand #",
 )
 _SUMMARY_START = re.compile(r"^Tournament\s+#", re.I)
 _GG_NAME_RE = re.compile(r"^GG\d{8}", re.I)
@@ -22,6 +23,7 @@ _HH_FIRST_LINE_PREFIXES = (
     "Poker Hand #",
     "PokerPlanets Hand #",
     "CoinPoker Hand #",
+    "1WinPoker Hand #",
     "***** 888poker Hand History",
 )
 
@@ -166,6 +168,8 @@ def _member_room(filename: str, first_line: str) -> str:
         return "coinpoker"
     if first_line.startswith("PokerPlanets Hand #"):
         return "poker_planets"
+    if first_line.startswith("1WinPoker Hand #"):
+        return "onewin"
     if _UP_NAME_RE.match(name):
         return "uppoker"
     if _GG_NAME_RE.match(name):

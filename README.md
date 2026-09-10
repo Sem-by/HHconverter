@@ -1,8 +1,8 @@
 # HHConverter
 
-Convert tournament and cash (CoinPoker) hand histories from multiple poker rooms into formats suitable for **Hand2Note 3**.
+Convert tournament and cash hand histories from multiple poker rooms into formats suitable for **Hand2Note 3**.
 
-Supports **PokerPlanets**, **GGPokerOK**, **UPpoker**, **CoinPoker**, and **888poker**, with optional Dropbox backup and **Chico** hands copy.
+Supports **PokerPlanets**, **GGPokerOK** (tournaments + cash), **UPpoker**, **CoinPoker** (tournaments + cash), **888poker**, and **1Win** (tournaments + cash), with optional Dropbox backup and **Chico** hands copy. It accepts .txt and .zip files.
 
 ![Intended way to use](converter/assets/intended_way_to_use.png)
 
@@ -13,14 +13,14 @@ Usage scenario author advice: hands from different sources are processed and sto
 ## Features
 
 - GUI (`HHConverter.exe` or `python -m converter.gui`) and CLI (`python -m converter`)
-- Per-room conversion to Hand2Note-compatible PokerStars / Coin-module layouts
+- **CoinPoker** / **GGPokerOK** / **1Win** cash and tournaments, **UPpoker** / **PokerPlanets** / **888poker** tournaments conversion to Hand2Note-compatible layouts
 - **888poker** new-format → legacy Pacific text (run-it-twice markers stripped)
 - Hand ID namespacing per room to avoid collisions in one database
 - Stack-based opponent name continuity (still random names) for obfuscated hands
-- Optional Dropbox backup (raw PP/GG/UP/888/Chico/Coin)
-- **Import from folders** — watch PokerPlanets + 888poker + Downloads for new files only. Downloads auto-import ignores files older than the first Convert day (avoids re-loading hands already in Hand2Note); older hands can still be placed in Import manually
+- Optional Dropbox backup (raw PP/GG/UP/888/Chico/Coin/1Win + summaries)
+- **Import from folders** — watch PokerPlanets, 888poker, 1Win, and Downloads for new files only. Downloads auto-import ignores files older than the first Convert day (avoids re-loading hands already in Hand2Note); older hands can still be placed in Import manually
 - Optional clear Import after convert; optional clear of **only processed** watched-folder files after Dropbox copy (Chico originals are never deleted)
-- Multilingual in-app help (EN / RU / UK / KK / FR / ES / PL)
+- Multilingual UI + in-app help (EN / RU / UK / KK / FR / ES / PL / DE)
 
 
 
@@ -49,7 +49,7 @@ python -m converter
 python -m converter --config config.json -q
 ```
 
-On first GUI launch, `config.json` is created next to the app if missing.
+On first GUI launch (no `config.json`), a short wizard creates settings next to the app.
 
 ## Configuration
 
@@ -60,16 +60,18 @@ Copy `config.example.json` to `config.json`:
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `import_path`                | Folder with raw `.txt` / `.zip` hand histories                                                                                                                                |
 | `export_path`                | Converted output folder                                                                                                                                                       |
-| `dropbox_base_path`          | Dropbox root for mirrored hands (empty = off). Layout: `PokerPlanets/`, `GGPokerOK/{year}/`, `UPpoker/{year}/`, `888/hands/{year}/`, `CoinPoker/{year}/{month}/`, `Chico/`, … |
+| `dropbox_base_path`          | Dropbox root for mirrored hands (empty = off). Layout: `PokerPlanets/`, `GGPokerOK/{year}/`, `UPpoker/{year}/`, `888/hands/{year}/`, `CoinPoker/{year}/{month}/`, `1Win/{year}/{month}/`, `Chico/`, … |
 | `dropbox_mode`               | `"original"` or `"none"`                                                                                                                                                      |
 | `chico_import_path`          | Chico `.txt` folder to copy unchanged (or `null`)                                                                                                                             |
 | `clear_import_after_convert` | Delete `*.txt` / `*.zip` under Import after a successful run                                                                                                                  |
 | `coin_as_ps`                 | Export CoinPoker as PokerStars-style (for H2N without Pro/Asia)                                                                                                               |
-| `import_from_folders`        | Also watch PokerPlanets / 888poker / Downloads for new files                                                                                                                  |
+| `import_from_folders`        | Also watch PokerPlanets / 888poker / 1Win / Downloads for new files                                                                                                           |
 | `poker_planets_folder`       | PokerPlanets HH root (recursive)                                                                                                                                              |
 | `eight88_folder`             | 888poker HH root (recursive)                                                                                                                                                  |
+| `onewin_folder`              | 1Win HH root (recursive)                                                                                                                                                      |
 | `downloads_folder`           | Downloads folder for GG/UP/Coin zips and txt                                                                                                                                  |
 | `clear_folders_after_import` | With Dropbox on: delete **processed** watched files only (not Chico)                                                                                                          |
+| `ui_language`                | UI language code: `en`, `ru`, `uk`, `kk`, `fr`, `es`, `pl`, `de`                                                                                                               |
 | `player_alias`               | Hero nickname in GG / UP / Coin output                                                                                                                                        |
 
 
