@@ -120,6 +120,9 @@ _BETS_RE = re.compile(r"^(\S+): bets ([€$]?)([\d,.]+)(.*)$")
 _RAISES_RE = re.compile(r"^(\S+): raises ([€$]?)([\d,.]+) to ([€$]?)([\d,.]+)(.*)$")
 _CALLS_RE = re.compile(r"^(\S+): calls ([€$]?)([\d,.]+)(.*)$")
 _ACTION_LINE_RE = re.compile(r"^(\S+): ")
+_BLIND_POST_RE = re.compile(
+    rf"^(\S+): posts (?:small|big) blind {_MONEY}(?: and is all-in| ALLIN)?$"
+)
 
 
 def _street_from_marker(name: str) -> str | None:
@@ -158,10 +161,16 @@ def _fmt_call(player: str, amount: float, symbol: str, suffix: str) -> str:
 
 
 def normalize_coin_action_lines(lines: list[str]) -> list[str]:
-    """Fix ALLIN/bet lines so Hand2Note action stamps parse (raises/calls vs bets)."""
+    """Fix ALLIN/bet lines so Hand2Note action stamps parse (raises/calls vs bets).
+
+    A native ALLIN becomes ``bets <remaining chips> and is all-in`` in the
+    formatting pass. Those chips are additional to the player's earlier
+    contribution on this street, including a preflop blind.
+    """
     out: list[str] = []
     street: str | None = None
     street_level = 0.0
+    committed: dict[str, float] = {}
     preflop_voluntary = False
 
     for line in lines:
@@ -170,13 +179,37 @@ def normalize_coin_action_lines(lines: list[str]) -> list[str]:
             name = _street_from_marker(marker.group(1))
             if name is not None:
                 street = name
-                street_level = 0.0
                 if name != "HOLE CARDS":
+                    street_level = 0.0
+                    committed = {}
                     preflop_voluntary = False
             out.append(line)
             continue
 
+        # Blinds are written before HOLE CARDS, but belong to the same round.
+        # Antes do not count towards the live wager.
+        blind = _BLIND_POST_RE.match(line)
+        if blind:
+            player, amount_raw = blind.groups()
+            committed[player] = committed.get(player, 0.0) + float(normalize_money(amount_raw))
+            street_level = max(street_level, committed[player])
+            out.append(line)
+            continue
+
         if street is None or street in ("SUMMARY", "SHOW DOWN"):
+            out.append(line)
+            continue
+
+        uncalled = _UNCALLED_RE.match(line)
+        returned = _RETURN_RE.match(line)
+        if uncalled or returned:
+            if uncalled:
+                amount_raw, player = uncalled.groups()
+            else:
+                assert returned is not None
+                player, amount_raw = returned.groups()
+            committed[player] = committed.get(player, 0.0) - float(normalize_money(amount_raw))
+            street_level = max(committed.values(), default=0.0)
             out.append(line)
             continue
 
@@ -192,20 +225,36 @@ def normalize_coin_action_lines(lines: list[str]) -> list[str]:
             amount = float(normalize_money(amount_raw))
             suffix = " and is all-in" if "all-in" in tail else ""
 
+            if suffix:
+                total = committed.get(player, 0.0) + amount
+                if total <= street_level + 0.005:
+                    line = _fmt_call(player, amount, symbol, suffix)
+                elif is_preflop or street_level > 0:
+                    line = _fmt_raise(player, total - street_level, total, symbol, suffix)
+                committed[player] = total
+                street_level = max(street_level, total)
+                preflop_voluntary = preflop_voluntary or is_preflop
+                out.append(line)
+                continue
+
             if is_preflop and not preflop_voluntary:
                 line = _fmt_raise(player, amount, amount, symbol, suffix)
-                street_level = amount
+                committed[player] = amount
+                street_level = max(street_level, amount)
                 preflop_voluntary = True
             elif street_level > 0:
                 if amount <= street_level + 0.005:
                     line = _fmt_call(player, amount, symbol, suffix)
+                    committed[player] = committed.get(player, 0.0) + amount
                 else:
                     line = _fmt_raise(
                         player, amount - street_level, amount, symbol, suffix
                     )
-                    street_level = amount
+                    committed[player] = amount
+                    street_level = max(street_level, amount)
                 preflop_voluntary = preflop_voluntary or is_preflop
             else:
+                committed[player] = amount
                 street_level = amount
                 if is_preflop:
                     preflop_voluntary = True
@@ -220,7 +269,8 @@ def normalize_coin_action_lines(lines: list[str]) -> list[str]:
                     f"{player}: raises {raises.group(2)}{raises.group(3)} to "
                     f"{total_sym}{total_raw} and is all-in"
                 )
-            street_level = float(normalize_money(total_raw))
+            committed[player] = float(normalize_money(total_raw))
+            street_level = max(street_level, committed[player])
             if is_preflop:
                 preflop_voluntary = True
             out.append(line)
@@ -228,8 +278,10 @@ def normalize_coin_action_lines(lines: list[str]) -> list[str]:
 
         calls = _CALLS_RE.match(line)
         if calls:
+            player = calls.group(1)
             amount = float(normalize_money(calls.group(3)))
-            street_level = max(street_level, amount)
+            committed[player] = committed.get(player, 0.0) + amount
+            street_level = max(street_level, committed[player])
             if is_preflop:
                 preflop_voluntary = True
             out.append(line)
