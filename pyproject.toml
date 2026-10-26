@@ -1,6 +1,6 @@
 [project]
 name = "converter"
-version = "0.5.0"
+version = "0.5.1"
 description = "Convert multi-room tournament and cash hand histories for Hand2Note 3"
 readme = "README.md"
 license = "GPL-3.0-only"
