@@ -17,11 +17,13 @@ from converter.engine import process_all
 from converter.settings import (
     Settings,
     assets_dir,
+    coin_cpr_alias_alert_pending,
     default_config_path,
     default_settings,
     ensure_default_config,
     is_path_set,
     load_settings,
+    mark_coin_cpr_alias_alert_shown,
     path_display,
     save_settings,
 )
@@ -1072,18 +1074,23 @@ class ConverterApp:
 
         def worker() -> None:
             error: str | None = None
+            coin_converted = False
             try:
-                process_all(settings, console_print=False)
+                coin_converted = process_all(settings, console_print=False)
             except OSError as exc:
                 error = f"IO problem: {exc}"
             except Exception as exc:  # noqa: BLE001 — show unexpected errors in the UI
                 error = f"Error (v{__version__}): {exc}"
 
-            self.root.after(0, lambda: self._convert_finished(error))
+            self.root.after(
+                0, lambda: self._convert_finished(error, coin_converted=coin_converted)
+            )
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _convert_finished(self, error: str | None) -> None:
+    def _convert_finished(
+        self, error: str | None, *, coin_converted: bool = False
+    ) -> None:
         self._set_busy(False)
         if error:
             self._set_convert_label("convert")
@@ -1095,6 +1102,31 @@ class ConverterApp:
         self._set_convert_label("done_again")
         if self._settings:
             self._status.configure(text=self._status_text(self._settings))
+            if coin_converted:
+                self._maybe_show_coin_cpr_alias_alert()
+
+    def _maybe_show_coin_cpr_alias_alert(self) -> None:
+        """One-shot: CoinPoker export (PRO/ASIA) dropped the ``_coin`` nick suffix."""
+        settings = self._settings
+        if settings is None or settings.coin_as_ps:
+            return
+        if not coin_cpr_alias_alert_pending(self.config_path):
+            return
+        hero = settings.player_alias.strip() or "Hero"
+        messagebox.showinfo(
+            t(self._lang, "coin_alias_alert_title"),
+            t(
+                self._lang,
+                "coin_alias_alert",
+                old=f"{hero}_coin",
+                new=hero,
+            ),
+            parent=self.root,
+        )
+        try:
+            mark_coin_cpr_alias_alert_shown(self.config_path)
+        except OSError:
+            pass
 
 
 def main(argv: list[str] | None = None) -> int:

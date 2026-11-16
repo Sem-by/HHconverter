@@ -97,12 +97,14 @@ def _format_amount(amount: str, *, currency: str) -> str:
 
 
 def format_coin_body_line(line: str) -> str | None:
-    """Tournament CPR_ path: chips as bare numbers (no room-currency glyph)."""
+    """Tournament CPR_ path body lines: bare chip amounts (ASCII-safe for file import)."""
     return _format_body_line(line, currency="")
 
 
 def format_ps_body_line(line: str) -> str | None:
+    """PokerStars-style tournament path: bare chip amounts."""
     return _format_body_line(line, currency="")
+
 
 
 def format_cash_body_line(line: str) -> str | None:
@@ -308,20 +310,21 @@ _LEVEL_BLINDS_RE = re.compile(
     r"Level [^\n]*\(([\d,.]+)/([\d,.]+)(?:\(([\d,.]+)\))?\)",
     re.I,
 )
+_CHIP_AMT = r"[€$]?([\d,.]+)"
 _SEAT_STACK_RE = re.compile(
-    r"^(Seat \d+: )(\S+) \(([\d,.]+) in chips\)$",
+    rf"^(Seat \d+: )(\S+) \({_CHIP_AMT} in chips\)$",
 )
 _POST_SB_LINE_RE = re.compile(
-    r"^(\S+): posts small blind ([\d,.]+)( and is all-in)?$"
+    rf"^(\S+): posts small blind {_CHIP_AMT}( and is all-in)?$"
 )
 _POST_BB_AI_LINE_RE = re.compile(
-    r"^(\S+): posts big blind ([\d,.]+) and is all-in$"
+    rf"^(\S+): posts big blind {_CHIP_AMT} and is all-in$"
 )
 _POST_ANTE_LINE_RE = re.compile(
-    r"^(\S+): posts the ante ([\d,.]+)( and is all-in)?$"
+    rf"^(\S+): posts the ante {_CHIP_AMT}( and is all-in)?$"
 )
 _UNCALLED_LINE_RE = re.compile(
-    r"^Uncalled bet \(([\d,.]+)\) returned to (\S+)$"
+    rf"^Uncalled bet \({_CHIP_AMT}\) returned to (\S+)$"
 )
 
 
@@ -366,6 +369,7 @@ def fix_short_blind_allin_for_h2n(text: str) -> str:
     assert sb_m and bb_m
     sb_name, sb_post = sb_m.group(1), float(normalize_money(sb_m.group(2)))
     bb_name, bb_post = bb_m.group(1), float(normalize_money(bb_m.group(2)))
+    cur = "€" if "€" in lines[bb_i] else ("$" if "$" in lines[bb_i] else "")
 
     if bb_post + 0.001 >= level_bb:
         return text
@@ -419,11 +423,13 @@ def fix_short_blind_allin_for_h2n(text: str) -> str:
             return text
 
         need_stack = ante + level_bb + sb_post
-        lines[seat_i] = f"{seat_m.group(1)}{bb_name} ({_coin_amt_token(need_stack)} in chips)"
-        lines[bb_i] = f"{bb_name}: posts big blind {_coin_amt_token(level_bb)}"
+        lines[seat_i] = (
+            f"{seat_m.group(1)}{bb_name} ({cur}{_coin_amt_token(need_stack)} in chips)"
+        )
+        lines[bb_i] = f"{bb_name}: posts big blind {cur}{_coin_amt_token(level_bb)}"
         if uncalled_i is not None:
             lines[uncalled_i] = (
-                f"Uncalled bet ({_coin_amt_token(level_bb - sb_post)}) "
+                f"Uncalled bet ({cur}{_coin_amt_token(level_bb - sb_post)}) "
                 f"returned to {bb_name}"
             )
         return "\n".join(lines)
@@ -441,7 +447,7 @@ def fix_short_blind_allin_for_h2n(text: str) -> str:
         )
     )
     if pattern_b:
-        bb_tok = _coin_amt_token(bb_post)
+        bb_tok = f"{cur}{_coin_amt_token(bb_post)}"
         lines[sb_i] = f"{sb_name}: posts small blind {bb_tok}"
         lines[bb_i] = f"{bb_name}: posts big blind {bb_tok} and is all-in"
         if uncalled_i is not None:
@@ -489,11 +495,13 @@ def _format_body_line(line: str, *, currency: str) -> str | None:
     if m:
         return f"{m.group(1)}{_format_amount(m.group(2), currency=currency)}{m.group(3)}"
 
+    # Blind/ante ALLIN: other working converters emit the short post only (no
+    # "and is all-in"). H2N NullRefs / drops the "posts … and is all-in" form.
     m = _ANTE_ALLIN_RE.match(stripped)
     if m:
         return (
             f"{m.group(1)}: posts the ante "
-            f"{_format_amount(m.group(2), currency=currency)} and is all-in"
+            f"{_format_amount(m.group(2), currency=currency)}"
         )
 
     m = _ANTE_RE.match(stripped)
@@ -504,7 +512,7 @@ def _format_body_line(line: str, *, currency: str) -> str | None:
     if m:
         return (
             f"{m.group(1)}: posts small blind "
-            f"{_format_amount(m.group(2), currency=currency)} and is all-in"
+            f"{_format_amount(m.group(2), currency=currency)}"
         )
 
     m = _SB_RE.match(stripped)
@@ -515,7 +523,7 @@ def _format_body_line(line: str, *, currency: str) -> str | None:
     if m:
         return (
             f"{m.group(1)}: posts big blind "
-            f"{_format_amount(m.group(2), currency=currency)} and is all-in"
+            f"{_format_amount(m.group(2), currency=currency)}"
         )
 
     m = _BB_RE.match(stripped)
@@ -614,14 +622,36 @@ def normalize_coin_board_line(line: str) -> str:
     return f"Board [{inner}]"
 
 
+def _strip_unshown_showdown(text: str) -> str:
+    """Match H2N Coin-module layout: no SHOW DOWN unless someone shows cards."""
+    if ": shows [" in text:
+        return text
+    lines_out: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped in {"*** SHOW DOWN ***", "*** SHOWDOWN ***"}:
+            continue
+        if stripped in {"Board []", "Board [ ]"}:
+            continue
+        lines_out.append(line)
+    return "\n".join(lines_out)
+
+
 def coin_postprocess(text: str) -> str:
+    """Finalize CPR_ tournament hands for Hand2Note's CoinPoker file import.
+
+    Official Hand2NoteHh Coin exports: integer chips, and no ``SHOW DOWN`` unless
+    someone shows. Unshown SHOW DOWN + fractional actions are where the text
+    importer throws ``BiggestBlind is zero`` / silent BuildStats drops.
+    """
     text = re.sub(r"(?m)^Game ended:.*\n", "", text)
     lines_out: list[str] = []
     for line in text.splitlines():
         if line.startswith("Board ["):
             line = normalize_coin_board_line(line)
         lines_out.append(line.rstrip())
-    lines_out = normalize_coin_action_lines(lines_out)
-    text = "\n".join(lines_out)
+    text = normalize_coin_hand_actions("\n".join(lines_out))
+    text = _integerize_hand_decimals(text)
+    text = _strip_unshown_showdown(text)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     return text.rstrip() + "\n"

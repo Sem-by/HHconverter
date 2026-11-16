@@ -51,8 +51,10 @@ from converter.zip_import import (
     zip_looks_like_hand_history,
 )
 
-def process_all(cfg: Settings, console_print: bool = True) -> None:
+def process_all(cfg: Settings, console_print: bool = True) -> bool:
+    """Convert import hands. Returns True if any CoinPoker hands were written."""
     cfg.export_path.mkdir(parents=True, exist_ok=True)
+    coin_converted = False
 
     if cfg.dropbox_mode == "original":
         migrate_dropbox_layout(cfg, console_print=console_print)
@@ -111,7 +113,7 @@ def process_all(cfg: Settings, console_print: bool = True) -> None:
             total_writes = 0
             coin_dropbox_buffers = new_coin_dropbox_buffers()
             for path in import_files:
-                written = _convert_import_file(
+                written, had_coin = _convert_import_file(
                     path,
                     cfg,
                     console_print,
@@ -119,6 +121,7 @@ def process_all(cfg: Settings, console_print: bool = True) -> None:
                 )
                 writes_by_path[_path_key(path)] = written
                 total_writes += written
+                coin_converted = coin_converted or had_coin
 
             flush_coin_dropbox_copies(
                 cfg, coin_dropbox_buffers, console_print=console_print
@@ -169,6 +172,8 @@ def process_all(cfg: Settings, console_print: bool = True) -> None:
     finally:
         for tmp in tmp_dirs:
             shutil.rmtree(tmp, ignore_errors=True)
+
+    return coin_converted
 
 
 def _path_key(path: Path) -> str:
@@ -429,11 +434,11 @@ def _convert_import_file(
     console_print: bool,
     *,
     coin_dropbox_buffers: dict[tuple[date, bool], list[str]],
-) -> int:
+) -> tuple[int, bool]:
     if _is_thanksholdemplayers(path.name):
         if console_print:
             print(f"[skip] ThanksHoldemPlayers: {path.name}")
-        return 0
+        return 0, False
 
     pairs: list[tuple[str, str]] = []
 
@@ -457,7 +462,7 @@ def _convert_import_file(
     if not pairs:
         if console_print:
             print(f"[skip] No hands parsed from {path.name}")
-        return 0
+        return 0, False
 
     grouped_converted: dict[tuple[str, str], list[str]] = defaultdict(list)
     grouped_raw: dict[tuple[str, str], list[str]] = defaultdict(list)
@@ -589,4 +594,4 @@ def _convert_import_file(
             print(f"[write] {export_file} ({len(converted_bodies)} hand(s))")
         writes += 1
 
-    return writes
+    return writes, bool(coin_by_key)

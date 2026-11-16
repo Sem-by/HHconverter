@@ -5,10 +5,8 @@ from datetime import date
 
 from converter.coin_format import (
     clean_tournament_title,
-    coin_postprocess,
     coin_timestamp_to_utc,
     format_cash_body_line,
-    format_coin_body_line,
     format_ps_body_line,
     format_stakes_int,
     normalize_coin_hand_actions,
@@ -176,12 +174,15 @@ class CoinPokerConverter:
     def __init__(self, hero_display_name: str, *, coin_as_ps: bool = False) -> None:
         self._hero_display_name = hero_display_name
         self._coin_as_ps = coin_as_ps
+        # ``_coin`` separates synthetic names from real PokerStars nicks; CPR_ path
+        # is already Room=CoinPoker so the suffix is unnecessary (and noisy in H2N).
+        suffix = "_coin" if coin_as_ps else ""
         self._players = PlayerNameSession(
-            name_suffix="_coin",
+            name_suffix=suffix,
             should_rename=self._should_rename_opponent,
         )
         self._cash_players = CashMultiTableNameSession(
-            name_suffix="_coin",
+            name_suffix=suffix,
             should_rename=self._should_rename_opponent,
         )
 
@@ -204,16 +205,17 @@ class CoinPokerConverter:
     def convert_hand(self, block: str) -> str:
         text = _build_hand(block, coin_as_ps=self._coin_as_ps)
         hero_name = self._hero_display_name
-        if not hero_name.endswith("_coin"):
+        if self._coin_as_ps and not hero_name.endswith("_coin"):
             hero_name = f"{hero_name}_coin"
         text = replace_seat_token(text, SOURCE_HERO_TOKEN, hero_name)
         if is_coin_cash_hand(block):
             text = normalize_coin_hand_actions(text)
             return global_postprocess(text)
-        if self._coin_as_ps:
-            text = normalize_coin_hand_actions(text)
-            return global_postprocess(text)
-        return coin_postprocess(text)
+        # Both tournament layouts share the proven PokerStars action body; CPR_ only
+        # changes the table prefix so H2N tags Room=CoinPoker. Do not run
+        # coin_postprocess (integerize / strip SD) — that path still dropped ~35%.
+        text = normalize_coin_hand_actions(text)
+        return global_postprocess(text)
 
 
 def _next_tournament_block(blocks: list[str], idx: int) -> str | None:
@@ -370,27 +372,34 @@ def _build_hand_cash(block: str, *, coin_as_ps: bool) -> str:
 
 
 def _build_hand_h2n(block: str) -> str:
+    """CoinPoker-room file import: identical to PS body, ``CPR_`` table only.
+
+    H2N tags Room=CoinPoker from the ``CPR_`` table prefix. Every prior CPR_
+    variant that changed Level / hand-id / € / integerize still dropped ~11605
+    hands in BuildStats. The PokerStars layout (Level I + ante, ``33`` hand id,
+    bare chips, table index ``1``) imports all hands — so reuse that body and
+    only swap the table name to ``CPR_{tid} 1`` for room tagging.
+    """
     parsed = _parse_coin_hand(block)
     if parsed is None:
         return block
 
-    hand_id, sb, bb, _ante, time_part, title_raw, tid, max_seats, button, body_lines = parsed
-    title = coin_h2n_tournament_title(title_raw, max_seats)
-    # Avoid ₮ in CPR_ headers (mojibake / H2N surprises); chips stay bare numbers.
-    title = title.replace("₮", "$")
-    sb_s = format_stakes_int(sb)
-    bb_s = format_stakes_int(bb)
+    hand_id, sb, bb, ante, time_part, title_raw, tid, max_seats, button, body_lines = parsed
+    hid = coin_display_hand_id(hand_id)
     utc_time = coin_timestamp_to_utc(time_part)
-
-    header = (
-        f"PokerStars Hand #{hand_id}: Tournament #{tid}, {title} Hold'em No Limit "
-        f"- Level ({sb_s}/{bb_s}) - {utc_time}"
+    level_piece = format_blinds_piece(_stakes_int(sb), _stakes_int(bb), _stakes_int(ante))
+    title = title_raw.replace("₮", "$")
+    tail = (
+        f"Tournament #{tid}, {title} Hold'em No Limit "
+        f"- Level I {level_piece} - {utc_time}"
     )
-    table_line = f"Table 'CPR_{tid} 0' {max_seats}-max Seat #{button} is the button"
+    tail = normalize_pp_header_timestamp(tail)
+    header = f"PokerStars Hand #{hid}: {tail}"
+    table_line = f"Table 'CPR_{tid} 1' {max_seats}-max Seat #{button} is the button"
 
     out_body: list[str] = []
     for line in body_lines:
-        formatted = format_coin_body_line(line)
+        formatted = format_ps_body_line(line)
         if formatted is not None:
             out_body.append(formatted)
 

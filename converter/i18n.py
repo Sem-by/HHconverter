@@ -46,7 +46,7 @@ UI: dict[str, dict[str, str]] = {
         "import_folder": "Import folder",
         "export_folder": "Export folder",
         "clear_import": "Clear Import folder after converting",
-        "coin_as_ps": "Coin hands as PokerStars (for non-PRO H2N)",
+        "coin_as_ps": "Coin as PokerStars (off = CPR_ CoinPoker tag)",
         "copy_to_dropbox": "Copy to Dropbox",
         "dropbox_folder": "Dropbox folder",
         "chico_folder": "Chico folder (optional)",
@@ -79,6 +79,12 @@ UI: dict[str, dict[str, str]] = {
         "wizard_h2n_pro": "PRO / ASIA",
         "wizard_h2n_basic": "BASIC",
         "wizard_nick_title": "Hero nickname",
+        "coin_alias_alert_title": "Hand2Note aliases",
+        "coin_alias_alert": (
+            "CoinPoker export no longer adds the _coin nickname suffix.\n\n"
+            "Update your Hand2Note aliases:\n"
+            "  [{old}] → [{new}]"
+        ),
     },
     "ru": {
         "settings_title": "Настройки",
@@ -86,7 +92,7 @@ UI: dict[str, dict[str, str]] = {
         "import_folder": "Папка Import",
         "export_folder": "Папка Export",
         "clear_import": "Очистить папку Import после конвертации",
-        "coin_as_ps": "Coin как PokerStars (для H2N без Pro/Asia)",
+        "coin_as_ps": "Coin как PokerStars (выкл = тег CoinPoker в H2N)",
         "copy_to_dropbox": "Копировать в Dropbox",
         "dropbox_folder": "Папка Dropbox",
         "chico_folder": "Папка Chico (необязательно)",
@@ -119,6 +125,12 @@ UI: dict[str, dict[str, str]] = {
         "wizard_h2n_pro": "PRO / ASIA",
         "wizard_h2n_basic": "BASIC",
         "wizard_nick_title": "Никнейм Hero",
+        "coin_alias_alert_title": "Алиасы Hand2Note",
+        "coin_alias_alert": (
+            "В экспорте CoinPoker суффикс _coin больше не добавляется.\n\n"
+            "Обновите алиасы в Hand2Note:\n"
+            "  [{old}] → [{new}]"
+        ),
     },
     "uk": {
         "settings_title": "Налаштування",
@@ -126,7 +138,7 @@ UI: dict[str, dict[str, str]] = {
         "import_folder": "Папка Import",
         "export_folder": "Папка Export",
         "clear_import": "Очистити папку Import після конвертації",
-        "coin_as_ps": "Coin як PokerStars (для H2N без Pro/Asia)",
+        "coin_as_ps": "Coin як PokerStars (вимк = тег CoinPoker в H2N)",
         "copy_to_dropbox": "Копіювати в Dropbox",
         "dropbox_folder": "Папка Dropbox",
         "chico_folder": "Папка Chico (необов'язково)",
@@ -159,6 +171,12 @@ UI: dict[str, dict[str, str]] = {
         "wizard_h2n_pro": "PRO / ASIA",
         "wizard_h2n_basic": "BASIC",
         "wizard_nick_title": "Нікнейм Hero",
+        "coin_alias_alert_title": "Аліаси Hand2Note",
+        "coin_alias_alert": (
+            "У експорті CoinPoker суфікс _coin більше не додається.\n\n"
+            "Оновіть аліаси в Hand2Note:\n"
+            "  [{old}] → [{new}]"
+        ),
     },
     "kk": {
         "settings_title": "Параметрлер",
@@ -166,7 +184,7 @@ UI: dict[str, dict[str, str]] = {
         "import_folder": "Import қалтасы",
         "export_folder": "Export қалтасы",
         "clear_import": "Түрлендіргеннен кейін Import қалтасын тазарту",
-        "coin_as_ps": "Coin — PokerStars (Pro/Asia жоқ H2N)",
+        "coin_as_ps": "Coin — PokerStars (өшірулі = CoinPoker тегі)",
         "copy_to_dropbox": "Dropbox-қа көшіру",
         "dropbox_folder": "Dropbox қалтасы",
         "chico_folder": "Chico қалтасы (міндетті емес)",
@@ -199,6 +217,12 @@ UI: dict[str, dict[str, str]] = {
         "wizard_h2n_pro": "PRO / ASIA",
         "wizard_h2n_basic": "BASIC",
         "wizard_nick_title": "Hero лақап аты",
+        "coin_alias_alert_title": "Hand2Note бүркеншік аттары",
+        "coin_alias_alert": (
+            "CoinPoker экспортында _coin жұрнағы енді қосылмайды.\n\n"
+            "Hand2Note-та бүркеншік аттарды жаңартыңыз:\n"
+            "  [{old}] → [{new}]"
+        ),
     },
     "fr": {
         "settings_title": "Paramètres",
@@ -206,7 +230,7 @@ UI: dict[str, dict[str, str]] = {
         "import_folder": "Dossier Import",
         "export_folder": "Dossier Export",
         "clear_import": "Vider le dossier Import après conversion",
-        "coin_as_ps": "Coin en PokerStars (H2N sans Pro/Asia)",
+        "coin_as_ps": "Coin en PokerStars (off = tag CoinPoker dans H2N)",
         "copy_to_dropbox": "Copier vers Dropbox",
         "dropbox_folder": "Dossier Dropbox",
         "chico_folder": "Dossier Chico (optionnel)",
@@ -239,6 +263,12 @@ UI: dict[str, dict[str, str]] = {
         "wizard_h2n_pro": "PRO / ASIA",
         "wizard_h2n_basic": "BASIC",
         "wizard_nick_title": "Pseudo Hero",
+        "coin_alias_alert_title": "Alias Hand2Note",
+        "coin_alias_alert": (
+            "L’export CoinPoker n’ajoute plus le suffixe _coin.\n\n"
+            "Mettez à jour vos alias Hand2Note :\n"
+            "  [{old}] → [{new}]"
+        ),
     },
     "es": {
         "settings_title": "Ajustes",
@@ -246,7 +276,7 @@ UI: dict[str, dict[str, str]] = {
         "import_folder": "Carpeta Import",
         "export_folder": "Carpeta Export",
         "clear_import": "Vaciar carpeta Import tras convertir",
-        "coin_as_ps": "Coin como PokerStars (H2N sin Pro/Asia)",
+        "coin_as_ps": "Coin como PokerStars (off = etiqueta CoinPoker en H2N)",
         "copy_to_dropbox": "Copiar a Dropbox",
         "dropbox_folder": "Carpeta Dropbox",
         "chico_folder": "Carpeta Chico (opcional)",
@@ -279,6 +309,12 @@ UI: dict[str, dict[str, str]] = {
         "wizard_h2n_pro": "PRO / ASIA",
         "wizard_h2n_basic": "BASIC",
         "wizard_nick_title": "Apodo Hero",
+        "coin_alias_alert_title": "Alias de Hand2Note",
+        "coin_alias_alert": (
+            "La exportación CoinPoker ya no añade el sufijo _coin.\n\n"
+            "Actualiza tus alias en Hand2Note:\n"
+            "  [{old}] → [{new}]"
+        ),
     },
     "pl": {
         "settings_title": "Ustawienia",
@@ -286,7 +322,7 @@ UI: dict[str, dict[str, str]] = {
         "import_folder": "Folder Import",
         "export_folder": "Folder Export",
         "clear_import": "Wyczyść folder Import po konwersji",
-        "coin_as_ps": "Coin jako PokerStars (H2N bez Pro/Asia)",
+        "coin_as_ps": "Coin jako PokerStars (wył. = tag CoinPoker w H2N)",
         "copy_to_dropbox": "Kopiuj do Dropbox",
         "dropbox_folder": "Folder Dropbox",
         "chico_folder": "Folder Chico (opcjonalnie)",
@@ -319,6 +355,12 @@ UI: dict[str, dict[str, str]] = {
         "wizard_h2n_pro": "PRO / ASIA",
         "wizard_h2n_basic": "BASIC",
         "wizard_nick_title": "Pseudonim Hero",
+        "coin_alias_alert_title": "Aliasy Hand2Note",
+        "coin_alias_alert": (
+            "Eksport CoinPoker nie dodaje już przyrostka _coin.\n\n"
+            "Zaktualizuj aliasy w Hand2Note:\n"
+            "  [{old}] → [{new}]"
+        ),
     },
     "de": {
         "settings_title": "Einstellungen",
@@ -326,7 +368,7 @@ UI: dict[str, dict[str, str]] = {
         "import_folder": "Import-Ordner",
         "export_folder": "Export-Ordner",
         "clear_import": "Import-Ordner nach dem Konvertieren leeren",
-        "coin_as_ps": "Coin als PokerStars (H2N ohne Pro/Asia)",
+        "coin_as_ps": "Coin als PokerStars (aus = CoinPoker-Tag in H2N)",
         "copy_to_dropbox": "Nach Dropbox kopieren",
         "dropbox_folder": "Dropbox-Ordner",
         "chico_folder": "Chico-Ordner (optional)",
@@ -359,6 +401,12 @@ UI: dict[str, dict[str, str]] = {
         "wizard_h2n_pro": "PRO / ASIA",
         "wizard_h2n_basic": "BASIC",
         "wizard_nick_title": "Hero-Nickname",
+        "coin_alias_alert_title": "Hand2Note-Aliase",
+        "coin_alias_alert": (
+            "Der CoinPoker-Export fügt das _coin-Suffix nicht mehr hinzu.\n\n"
+            "Aktualisiere deine Hand2Note-Aliase:\n"
+            "  [{old}] → [{new}]"
+        ),
     },
 }
 

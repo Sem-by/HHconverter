@@ -138,6 +138,29 @@ def default_config_path() -> Path:
     return program_base() / "config.json"
 
 
+def coin_cpr_alias_alert_pending(config_path: Path) -> bool:
+    """True until the one-shot CPR_ nickname-suffix alert has been acknowledged."""
+    if not config_path.is_file():
+        return True
+    try:
+        data = _read_json(config_path)
+    except ValueError:
+        return True
+    return not bool(data.get("coin_cpr_alias_alert_shown", False))
+
+
+def mark_coin_cpr_alias_alert_shown(config_path: Path) -> None:
+    if config_path.is_file():
+        data = _read_json(config_path)
+    else:
+        data = {}
+    data["coin_cpr_alias_alert_shown"] = True
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with config_path.open("w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2)
+        fh.write("\n")
+
+
 def save_settings(config_path: Path, settings: Settings) -> None:
     if config_path.is_file():
         data = _read_json(config_path)
