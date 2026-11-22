@@ -11,8 +11,12 @@ from converter.time_et import (
     strip_trailing_timestamp_token,
 )
 
+_POKER_HAND_HEADER_RE = re.compile(r"Poker\s+Hand\s+#([^\s:]+)\s*:\s*(.+)")
 _SHOWDOWN_RE = re.compile(r"\*\*\* SHOWDOWN \*\*\*")
-_EMPTY_DEALT_RE = re.compile(r"^Dealt to \S+\s*$")
+_DEALT_CARDS_EOL_RE = re.compile(
+    r"\[(?:10|[2-9TJQKA])[cdhs](?:\s+(?:10|[2-9TJQKA])[cdhs])*\]\s*$",
+    re.I,
+)
 _UNCALLED_TYPO_RE = re.compile(
     r"^uncalled bet \(([^)]+)\) retured to ",
     re.IGNORECASE,
@@ -21,6 +25,8 @@ _TOURNAMENT_ID_RE = re.compile(r"(Tournament #)(\d+)")
 _TABLE_LINE_RE = re.compile(
     r"^Table '([^']*)' (\d+)-max Seat #(\d+) is the button\s*$"
 )
+_MULTI_COMMA_SPACE_RE = re.compile(r",\s{2,}")
+_UP_LEVEL_RE = re.compile(r"Level\s*\d+\s*\(")
 
 
 class UPpokerConverter:
@@ -35,30 +41,41 @@ class UPpokerConverter:
             return block
 
         first = restore_poker_hand_header_colon(lines[0].strip())
-        m = re.match(r"Poker\s+Hand\s+#([^\s:]+)\s*:\s*(.+)", first)
+        m = _POKER_HAND_HEADER_RE.match(first)
         if not m:
             return block
 
         hid = up_display_hand_id(m.group(1))
         tail = _normalize_up_header_tail(m.group(2).strip())
         header = f"PokerStars Hand #{hid}: {tail}"
+        tid = _extract_tournament_id(tail)
 
         body: list[str] = []
+        append = body.append
+        table_seen = False
         for line in lines[1:]:
-            table_m = _TABLE_LINE_RE.match(line.strip())
-            if table_m and not body:
-                tid = _extract_tournament_id(tail)
-                max_seats = table_m.group(2)
-                button = table_m.group(3)
-                line = f"Table '{tid} 0' {max_seats}-max Seat #{button} is the button"
+            if not table_seen and line.lstrip().startswith("Table '"):
+                table_m = _TABLE_LINE_RE.match(line.strip())
+                if table_m:
+                    table_seen = True
+                    max_seats = table_m.group(2)
+                    button = table_m.group(3)
+                    append(f"Table '{tid} 0' {max_seats}-max Seat #{button} is the button")
+                    continue
 
-            line = _strip_empty_dealt_line(line)
-            if line is None:
+            if line.startswith("Dealt to "):
+                if not _DEALT_CARDS_EOL_RE.search(line):
+                    continue
+                append(line)
                 continue
-            line = _normalize_uncalled_line(line)
-            line = _normalize_showdown_line(line)
-            line = _normalize_won_to_collected(line)
-            body.append(line)
+
+            if line and line[0] in ("u", "U") and line.lower().startswith("uncalled bet "):
+                line = _normalize_uncalled_line(line)
+            elif "*** SHOWDOWN ***" in line:
+                line = _normalize_showdown_line(line)
+            elif " won (" in line:
+                line = _normalize_won_to_collected(line)
+            append(line)
 
         return "\n".join([header, *body])
 
@@ -75,8 +92,8 @@ def _normalize_up_header_tail(header_tail: str) -> str:
         return match.group(1) + up_display_tournament_id(match.group(2))
 
     header_tail = _TOURNAMENT_ID_RE.sub(tid_repl, header_tail, count=1)
-    header_tail = re.sub(r",\s{2,}", ", ", header_tail)
-    header_tail = re.sub(r"Level\s*\d+\s*\(", "Level (", header_tail, count=1)
+    header_tail = _MULTI_COMMA_SPACE_RE.sub(", ", header_tail)
+    header_tail = _UP_LEVEL_RE.sub("Level (", header_tail, count=1)
 
     cleaned = strip_existing_et_brackets(header_tail.rstrip())
     utc_dt = parse_header_timestamp(cleaned)
@@ -88,7 +105,7 @@ def _normalize_up_header_tail(header_tail: str) -> str:
 
 
 def _strip_empty_dealt_line(line: str) -> str | None:
-    if _EMPTY_DEALT_RE.match(line.rstrip()):
+    if line.startswith("Dealt to ") and not _DEALT_CARDS_EOL_RE.search(line):
         return None
     return line
 
@@ -107,11 +124,11 @@ def _normalize_uncalled_line(line: str) -> str:
 
 
 def _normalize_won_to_collected(line: str) -> str:
-    if " won (" not in line:
+    if " won (" not in line or not line.lstrip().startswith("Seat "):
         return line
     if "showed" in line and " with " in line:
         return line
-    return re.sub(r"\bwon \(", "collected (", line)
+    return line.replace(" won (", " collected (")
 
 
 # Backward-compatible alias

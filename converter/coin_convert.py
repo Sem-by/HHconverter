@@ -57,39 +57,46 @@ _COIN_CASH_TABLE_RE = re.compile(
     re.I,
 )
 _TOURNAMENT_HASH_RE = re.compile(r"Tournament\s+#(\d+)", re.I)
+_TOURNAMENT_START_RE = re.compile(r"^Tournament\s+'", re.M)
+_TOURNAMENT_LOOSE_RE = re.compile(r"Tournament\s+'(.+?)'\s+'(\d+)'\s+")
+_STRIP_NON_NUM_RE = re.compile(r"[^\d,.]+")
 
 
 def is_coin_cash_hand(block: str) -> bool:
-    lines = block.splitlines()
-    if not lines:
+    if not block:
         return False
-    header = lines[0].strip()
+    first_nl = block.find("\n")
+    header = (block if first_nl == -1 else block[:first_nl]).strip()
+    if not header:
+        return False
     if _COIN_LEGACY_HAND_RE.match(header) or _TOURNAMENT_HASH_RE.search(header):
-        return False
-    if any(_COIN_TOURNAMENT_RE.match(ln.strip()) for ln in lines[1:6]):
-        return False
-    if re.search(r"^Tournament\s+'", block, re.M):
         return False
     # Only treat as cash when the header stakes are parseable (avoids detect/parse mismatch).
     if not (
         _COIN_CASH_HAND_RE.match(header) or _COIN_CASH_STAKES_LOOSE_RE.match(header)
     ):
         return False
-    return _find_cash_table_line(lines) is not None
+    head_lines = block.splitlines()[:8]
+    for ln in head_lines[1:6]:
+        if _COIN_TOURNAMENT_RE.match(ln.strip()):
+            return False
+    if "Tournament '" in block and _TOURNAMENT_START_RE.search(block):
+        return False
+    return _find_cash_table_line(head_lines) is not None
 
 
 def is_coin_legacy_tournament(block: str) -> bool:
-    lines = block.splitlines()
-    if not lines:
+    header = block.partition("\n")[0].strip()
+    if not header:
         return False
-    return bool(_COIN_LEGACY_HAND_RE.match(lines[0].strip()))
+    return bool(_COIN_LEGACY_HAND_RE.match(header))
 
 
 def coin_tournament_id(block: str) -> str:
     m = _COIN_TOURNAMENT_RE.search(block)
     if m:
         return m.group(2)
-    m = re.search(r"Tournament\s+'(.+?)'\s+'(\d+)'\s+", block)
+    m = _TOURNAMENT_LOOSE_RE.search(block)
     if m:
         return m.group(2)
     m = _TOURNAMENT_HASH_RE.search(block)
@@ -103,7 +110,7 @@ def coin_group_key(block: str) -> str:
     if is_coin_cash_hand(block):
         parsed = _parse_coin_cash_hand(block)
         if parsed is None:
-            header = block.splitlines()[0].strip() if block.splitlines() else ""
+            header = block.partition("\n")[0].strip()
             raise ValueError(f"Unrecognized CoinPoker cash hand: {header!r}")
         hand_id, sb, bb, time_part, table_name, max_seats, button, body = parsed
         del hand_id, table_name, max_seats, button, body
@@ -119,7 +126,7 @@ def coin_group_key(block: str) -> str:
 
 
 def _parse_stakes_token(raw: str) -> float:
-    cleaned = re.sub(r"[^\d,.]+", "", raw)
+    cleaned = _STRIP_NON_NUM_RE.sub("", raw)
     return float(normalize_money(cleaned))
 
 
@@ -147,10 +154,9 @@ def _cash_played_on(time_part: str) -> str:
 
 def coin_hand_played_on(block: str) -> date:
     """Play date for a single CoinPoker hand block (used for Dropbox day files)."""
-    lines = block.splitlines()
-    if not lines:
+    header = block.partition("\n")[0].strip()
+    if not header:
         raise ValueError("empty CoinPoker hand")
-    header = lines[0].strip()
     cleaned = strip_existing_et_brackets(header.rstrip())
     dt = parse_header_timestamp(cleaned)
     if dt is None:
@@ -192,29 +198,36 @@ class CoinPokerConverter:
     def convert_file_blocks(self, blocks: list[str]) -> list[str]:
         self._players.reset()
         self._cash_players.reset()
+        cash_flags = [is_coin_cash_hand(block) for block in blocks]
+        # Precompute next non-cash block index in O(N) instead of scanning per hand.
+        next_tourney: list[str | None] = [None] * len(blocks)
+        upcoming: str | None = None
+        for idx in range(len(blocks) - 1, -1, -1):
+            next_tourney[idx] = upcoming
+            if not cash_flags[idx]:
+                upcoming = blocks[idx]
+
         out: list[str] = []
+        append = out.append
         for idx, block in enumerate(blocks):
-            if is_coin_cash_hand(block):
+            is_cash = cash_flags[idx]
+            if is_cash:
                 body = self._cash_players.map_players(block)
             else:
-                next_text = _next_tournament_block(blocks, idx)
-                body = self._players.map_players(block, next_hand_text=next_text)
-            out.append(self.convert_hand(body))
+                body = self._players.map_players(block, next_hand_text=next_tourney[idx])
+            append(self.convert_hand(body, _is_cash=is_cash))
         return out
 
-    def convert_hand(self, block: str) -> str:
-        text = _build_hand(block, coin_as_ps=self._coin_as_ps)
+    def convert_hand(self, block: str, *, _is_cash: bool | None = None) -> str:
+        is_cash = is_coin_cash_hand(block) if _is_cash is None else _is_cash
+        text = _build_hand(block, coin_as_ps=self._coin_as_ps, is_cash=is_cash)
         hero_name = self._hero_display_name
         if self._coin_as_ps and not hero_name.endswith("_coin"):
             hero_name = f"{hero_name}_coin"
-        text = replace_seat_token(text, SOURCE_HERO_TOKEN, hero_name)
-        if is_coin_cash_hand(block):
-            text = normalize_coin_hand_actions(text)
-            return global_postprocess(text)
-        # Both tournament layouts share the proven PokerStars action body; CPR_ only
-        # changes the table prefix so H2N tags Room=CoinPoker. Do not run
-        # coin_postprocess (integerize / strip SD) — that path still dropped ~35%.
+        # Normalize actions before replacing Hero so even a spaced player_alias
+        # is never split across action regexes; coin_format also tolerates spaces.
         text = normalize_coin_hand_actions(text)
+        text = replace_seat_token(text, SOURCE_HERO_TOKEN, hero_name)
         return global_postprocess(text)
 
 
@@ -239,8 +252,19 @@ def _parse_coin_hand(block: str):
     if not hm:
         return None
 
-    tm = _COIN_TOURNAMENT_RE.match(lines[1].strip())
-    if not tm:
+    tm = None
+    tm_idx = None
+    for idx, ln in enumerate(lines[1:6], start=1):
+        stripped = ln.strip()
+        if not stripped:
+            continue
+        tm = _COIN_TOURNAMENT_RE.match(stripped)
+        if tm:
+            tm_idx = idx
+            break
+        if stripped.startswith("Seat ") or stripped.startswith("***"):
+            break
+    if not tm or tm_idx is None:
         return None
 
     return (
@@ -253,7 +277,7 @@ def _parse_coin_hand(block: str):
         tm.group(2).strip(),
         tm.group(3),
         tm.group(4),
-        lines[2:],
+        lines[tm_idx + 1 :],
     )
 
 
@@ -331,8 +355,8 @@ def _parse_coin_cash_hand(block: str):
     )
 
 
-def _build_hand(block: str, *, coin_as_ps: bool) -> str:
-    if is_coin_cash_hand(block):
+def _build_hand(block: str, *, coin_as_ps: bool, is_cash: bool | None = None) -> str:
+    if is_coin_cash_hand(block) if is_cash is None else is_cash:
         return _build_hand_cash(block, coin_as_ps=coin_as_ps)
     if coin_as_ps:
         return _build_hand_ps(block)

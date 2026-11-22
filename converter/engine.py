@@ -15,12 +15,12 @@ from converter.coin_convert import (
 from converter.eight88_convert import Eight88Converter, eight88_group_key
 from converter.dropbox_mirror import (
     add_coin_dropbox_raw_hands,
-    copy_room_export,
     copy_summary_file,
     flush_coin_dropbox_copies,
     migrate_dropbox_layout,
     mirror_chico_import,
     new_coin_dropbox_buffers,
+    write_room_export_text,
     year_from_summary_name,
 )
 from converter.export_names import export_filename, tournament_meta_from_blocks
@@ -44,12 +44,14 @@ from converter.split_hands import detect_room_from_first_line, iter_hand_blocks
 from converter.up_convert import UPpokerConverter
 from converter.win1_convert import OneWinConverter, onewin_group_key
 from converter.zip_import import (
+    ZipMember,
     classify_zip,
-    extract_zip_member,
-    iter_summary_members,
+    extract_zip_members,
     list_import_zips,
     zip_looks_like_hand_history,
 )
+
+_THP_STRIP_RE = re.compile(r"[#\s_\-]+")
 
 def process_all(cfg: Settings, console_print: bool = True) -> bool:
     """Convert import hands. Returns True if any CoinPoker hands were written."""
@@ -89,9 +91,12 @@ def process_all(cfg: Settings, console_print: bool = True) -> bool:
 
     tmp_dirs: list[Path] = []
     try:
+        classified_zips: dict[Path, list[ZipMember]] = {
+            zpath: classify_zip(zpath) for zpath in zip_files
+        }
         extracted_by_zip: dict[str, list[Path]] = {}
         for zpath in zip_files:
-            extracted = _extract_hand_members(zpath, tmp_dirs)
+            extracted = _extract_hand_members(zpath, classified_zips[zpath], tmp_dirs)
             extracted_by_zip[_path_key(zpath)] = extracted
             import_files.extend(extracted)
 
@@ -100,7 +105,7 @@ def process_all(cfg: Settings, console_print: bool = True) -> bool:
             summary_zip_keys = {
                 _path_key(p)
                 for p in _copy_summaries_from_zips(
-                    cfg, zip_files, console_print=console_print
+                    cfg, classified_zips, console_print=console_print
                 )
             }
 
@@ -111,6 +116,7 @@ def process_all(cfg: Settings, console_print: bool = True) -> bool:
             # Still mirror Chico / clear if configured.
         else:
             total_writes = 0
+            written_exports: set[Path] = set()
             coin_dropbox_buffers = new_coin_dropbox_buffers()
             for path in import_files:
                 written, had_coin = _convert_import_file(
@@ -118,6 +124,7 @@ def process_all(cfg: Settings, console_print: bool = True) -> bool:
                     cfg,
                     console_print,
                     coin_dropbox_buffers=coin_dropbox_buffers,
+                    written_exports=written_exports,
                 )
                 writes_by_path[_path_key(path)] = written
                 total_writes += written
@@ -332,45 +339,65 @@ def _collect_zip_files(
 
 def _is_thanksholdemplayers(name: str) -> bool:
     """Skip GG #ThanksHoldemPlayers freeroll exports (filename or title)."""
-    return "thanksholdemplayers" in re.sub(r"[#\s_\-]+", "", name.casefold())
+    return "thanksholdemplayers" in _THP_STRIP_RE.sub("", name.casefold())
 
 
-def _extract_hand_members(zpath: Path, tmp_dirs: list[Path]) -> list[Path]:
+def _extract_hand_members(
+    zpath: Path,
+    members: list[ZipMember],
+    tmp_dirs: list[Path],
+) -> list[Path]:
+    names = [
+        member.member_name
+        for member in members
+        if member.kind == "hands"
+        and not _is_thanksholdemplayers(Path(member.member_name).name)
+    ]
+    if not names:
+        return []
     tmp = Path(tempfile.mkdtemp(prefix="hhconv_zip_"))
     tmp_dirs.append(tmp)
-    out: list[Path] = []
-    for member in classify_zip(zpath):
-        if member.kind != "hands":
-            continue
-        if _is_thanksholdemplayers(Path(member.member_name).name):
-            continue
-        out.append(extract_zip_member(zpath, member.member_name, tmp))
-    return out
+    return extract_zip_members(zpath, names, tmp)
 
 
 def _copy_summaries_from_zips(
     cfg: Settings,
-    zips: list[Path],
+    classified_zips: dict[Path, list[ZipMember]],
     *,
     console_print: bool,
 ) -> set[Path]:
     """Copy GG/UP summaries from zips. Returns zip paths that contributed at least one summary."""
     copied_from: set[Path] = set()
+    summary_by_zip: dict[Path, list[ZipMember]] = {}
+    for zpath, members in classified_zips.items():
+        picked = [
+            member
+            for member in members
+            if member.kind == "summaries" and member.room in {"ggpoker_ok", "uppoker"}
+        ]
+        if picked:
+            summary_by_zip[zpath] = picked
+    if not summary_by_zip:
+        return copied_from
+
     tmp = Path(tempfile.mkdtemp(prefix="hhconv_sum_"))
     try:
-        for member in iter_summary_members(zips):
-            year = member.year or year_from_summary_name(Path(member.member_name).name)
-            if year is None:
-                year = date.today().year
-            extracted = extract_zip_member(member.zip_path, member.member_name, tmp)
-            copy_summary_file(
-                cfg,
-                room=member.room,
-                year=year,
-                source_file=extracted,
-                console_print=console_print,
+        for zpath, members in summary_by_zip.items():
+            extracted_paths = extract_zip_members(
+                zpath, [m.member_name for m in members], tmp
             )
-            copied_from.add(member.zip_path)
+            for member, extracted in zip(members, extracted_paths):
+                year = member.year or year_from_summary_name(Path(member.member_name).name)
+                if year is None:
+                    year = date.today().year
+                copy_summary_file(
+                    cfg,
+                    room=member.room,
+                    year=year,
+                    source_file=extracted,
+                    console_print=console_print,
+                )
+                copied_from.add(zpath)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return copied_from
@@ -434,6 +461,7 @@ def _convert_import_file(
     console_print: bool,
     *,
     coin_dropbox_buffers: dict[tuple[date, bool], list[str]],
+    written_exports: set[Path] | None = None,
 ) -> tuple[int, bool]:
     if _is_thanksholdemplayers(path.name):
         if console_print:
@@ -445,7 +473,7 @@ def _convert_import_file(
     for block in iter_hand_blocks(path):
         if not block:
             continue
-        first = block.splitlines()[0].lstrip()
+        first = block.partition("\n")[0].lstrip()
         if _is_thanksholdemplayers(first):
             continue
         room = detect_room_from_first_line(first)
@@ -547,6 +575,7 @@ def _convert_import_file(
             grouped_raw[("onewin", key)].extend(blocks)
 
     writes = 0
+    multi_group = len(grouped_converted) > 1
     for key in grouped_converted:
         room, tid = key
         converted_bodies = grouped_converted[key]
@@ -556,7 +585,15 @@ def _convert_import_file(
 
         export_file = cfg.export_path / out_name
         converted_payload = "\n\n".join(converted_bodies).rstrip() + "\n"
-        export_file.write_text(converted_payload, encoding="utf-8")
+        if written_exports is not None and export_file in written_exports:
+            # Multiple input files in the same Convert run mapped to the same export
+            # file (e.g. split sessions or same cash stake/day): append instead of overwriting.
+            with export_file.open("a", encoding="utf-8") as fh:
+                fh.write("\n" + converted_payload)
+        else:
+            export_file.write_text(converted_payload, encoding="utf-8")
+            if written_exports is not None:
+                written_exports.add(export_file)
 
         if cfg.dropbox_mode == "original":
             if room == "coinpoker":
@@ -570,25 +607,14 @@ def _convert_import_file(
                     )
             else:
                 original_payload = "\n\n".join(raw_bodies).rstrip() + "\n"
-                with tempfile.NamedTemporaryFile(
-                    "w",
-                    encoding="utf-8",
-                    suffix=".txt",
-                    delete=False,
-                ) as tmp:
-                    tmp.write(original_payload)
-                    tmp_path = Path(tmp.name)
-                try:
-                    copy_room_export(
-                        cfg,
-                        room=room,
-                        meta=meta,
-                        source_file=tmp_path,
-                        dest_name=path.name,
-                        console_print=console_print,
-                    )
-                finally:
-                    tmp_path.unlink(missing_ok=True)
+                write_room_export_text(
+                    cfg,
+                    room=room,
+                    meta=meta,
+                    payload=original_payload,
+                    dest_name=out_name if multi_group else path.name,
+                    console_print=console_print,
+                )
 
         if console_print:
             print(f"[write] {export_file} ({len(converted_bodies)} hand(s))")

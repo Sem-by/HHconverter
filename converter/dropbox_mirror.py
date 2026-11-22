@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import filecmp
+import os
 import re
 import shutil
+import tempfile
 from collections import defaultdict
 from datetime import date
 from pathlib import Path
@@ -13,8 +15,24 @@ from converter.settings import Settings, is_path_set
 from converter.split_hands import iter_hand_blocks
 
 _FILENAME_DATE_RE = re.compile(r"(\d{4})[_\-.](\d{1,2})[_\-.](\d{1,2})")
+_ONEWIN_DATE_RE = re.compile(r"(20\d{2})[-_.](\d{1,2})[-_.](\d{1,2})")
 _SUMMARY_YEAR_RE = re.compile(r"^(?:GG|UP)(\d{4})", re.I)
 _COIN_HAND_ID_RE = re.compile(r"CoinPoker\s+Hand\s+#(\d+)", re.I)
+
+
+def _atomic_write_text(dest: Path, text: str) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=".hhconv_", suffix=".tmp", dir=dest.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp_name, dest)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
 
 
 def coin_dropbox_filename(played_on: date, *, cash: bool = False) -> str:
@@ -86,9 +104,9 @@ def flush_coin_dropbox_copies(
         if dest_file.is_file():
             existing = list(iter_hand_blocks(dest_file))
         merged = merge_coin_dropbox_hands(existing, incoming)
-        dest_file.write_text("\n\n".join(merged).rstrip() + "\n", encoding="utf-8")
+        _atomic_write_text(dest_file, "\n\n".join(merged).rstrip() + "\n")
         if console_print:
-            added = len(incoming)
+            added = max(0, len(merged) - len(existing))
             print(
                 f"[dropbox] {dest_file} ({len(merged)} hand(s)"
                 f"{f', +{added} new' if added else ''})"
@@ -96,7 +114,7 @@ def flush_coin_dropbox_copies(
 
 
 def _coin_hand_id(block: str) -> str | None:
-    header = block.splitlines()[0].strip() if block.splitlines() else block.strip()
+    header = block.partition("\n")[0].strip()
     match = _COIN_HAND_ID_RE.search(header)
     return match.group(1) if match else None
 
@@ -145,6 +163,30 @@ def copy_room_export(
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_file = dest_dir / (dest_name or source_file.name)
     shutil.copy2(source_file, dest_file)
+    if console_print:
+        print(f"[dropbox] {dest_file}")
+
+
+def write_room_export_text(
+    cfg: Settings,
+    *,
+    room: str,
+    meta: TournamentMeta,
+    payload: str,
+    dest_name: str,
+    console_print: bool,
+) -> None:
+    if cfg.dropbox_mode == "none":
+        return
+
+    dest_dir = room_hands_dir(
+        cfg,
+        room,
+        meta.played_on.year,
+        meta.played_on.month if room == "onewin" else None,
+    )
+    dest_file = dest_dir / dest_name
+    _atomic_write_text(dest_file, payload)
     if console_print:
         print(f"[dropbox] {dest_file}")
 
@@ -235,9 +277,12 @@ def _chico_dest(cfg: Settings, src: Path) -> tuple[Path, str]:
     if not m:
         return cfg.dropbox_base_path / "Chico" / "Misc", src.name
 
-    year = m.group(1)
-    month = f"{int(m.group(2)):02d}"
-    return cfg.dropbox_base_path / "Chico" / year / month, src.name
+    year = int(m.group(1))
+    month_num = int(m.group(2))
+    day_num = int(m.group(3))
+    if not (1990 <= year <= 2100 and 1 <= month_num <= 12 and 1 <= day_num <= 31):
+        return cfg.dropbox_base_path / "Chico" / "Misc", src.name
+    return cfg.dropbox_base_path / "Chico" / str(year) / f"{month_num:02d}", src.name
 
 
 def _migrate_room_kind_year_under(
@@ -255,7 +300,6 @@ def _migrate_room_kind_year_under(
         new_dir = base / room / year_dir.name / kind
         if _relocate_dir(year_dir, new_dir, console_print=console_print):
             _remove_if_empty(old_root)
-            _remove_if_empty(base / room / kind)
 
 
 def _migrate_888_year_to_hands(base: Path, *, console_print: bool) -> None:
@@ -298,12 +342,16 @@ def _migrate_onewin_year_to_year_month(base: Path, *, console_print: bool) -> No
 
 
 def _month_from_onewin_dropbox_name(name: str) -> int | None:
-    m = re.search(r"(20\d{2})[-_.](\d{1,2})[-_.](\d{1,2})", name)
+    m = _ONEWIN_DATE_RE.search(name)
     if m:
-        return int(m.group(2))
+        month = int(m.group(2))
+        if 1 <= month <= 12:
+            return month
     m = _FILENAME_DATE_RE.search(name)
     if m:
-        return int(m.group(2))
+        month = int(m.group(2))
+        if 1 <= month <= 12:
+            return month
     return None
 
 

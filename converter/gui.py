@@ -121,7 +121,10 @@ def _show_modal(window: tk.Toplevel, parent: tk.Misc) -> None:
     window.focus_force()
     try:
         window.attributes("-topmost", True)
-        window.after(50, lambda: window.attributes("-topmost", False))
+        window.after(
+            50,
+            lambda: window.winfo_exists() and window.attributes("-topmost", False),
+        )
     except tk.TclError:
         pass
     window.grab_set()
@@ -693,6 +696,12 @@ class InfoDialog(tk.Toplevel):
         self.bind("<Configure>", self._on_configure)
 
     def _on_close(self) -> None:
+        if self._resize_after is not None:
+            try:
+                self.after_cancel(self._resize_after)
+            except tk.TclError:
+                pass
+            self._resize_after = None
         self._close_diagram_full()
         self.destroy()
 
@@ -765,7 +774,7 @@ class InfoDialog(tk.Toplevel):
 
     def _resize_diagram_to_window(self) -> None:
         self._resize_after = None
-        if self._diagram_pil is None:
+        if self._diagram_pil is None or not self.winfo_exists():
             return
         inner = max(160, self.winfo_width() - self._PAD)
         # Grow/shrink with the window but never past the original image width.
@@ -1082,9 +1091,12 @@ class ConverterApp:
             except Exception as exc:  # noqa: BLE001 — show unexpected errors in the UI
                 error = f"Error (v{__version__}): {exc}"
 
-            self.root.after(
-                0, lambda: self._convert_finished(error, coin_converted=coin_converted)
-            )
+            try:
+                self.root.after(
+                    0, lambda: self._convert_finished(error, coin_converted=coin_converted)
+                )
+            except (RuntimeError, tk.TclError):
+                pass
 
         threading.Thread(target=worker, daemon=True).start()
 

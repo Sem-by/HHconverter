@@ -23,18 +23,21 @@ _RUNOUT_PREFIX_RE = re.compile(r"^(First|Second) runout ", re.I | re.M)
 _TIMESTAMP_RE = re.compile(
     r"\*\*\*\s+(\d{1,2})\s+(\d{1,2})\s+(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s*$"
 )
-_BUYIN_RE = re.compile(r"^(\$[\d.]+(?:\s*\+\s*\$[\d.]+)?)\s*(.*)$")
+_BUYIN_RE = re.compile(r"^([$€£][\d,.]+(?:\s*\+\s*[$€£][\d,.]+)*)\s*(.*)$")
+_WS_RE = re.compile(r"\s+")
 
 
 def is_888_hand(block: str) -> bool:
+    seen = 0
     for line in block.splitlines():
         stripped = line.strip()
         if not stripped:
             continue
-        if _HAND_HEADER_RE.match(stripped):
+        if stripped.startswith("***** 888poker Hand History") or _HAND_HEADER_RE.match(stripped):
             return True
-        if stripped.startswith("***** 888poker Hand History"):
-            return True
+        seen += 1
+        if seen >= 4:
+            break
     return False
 
 
@@ -51,32 +54,49 @@ def is_888_new_format(block: str) -> bool:
 def eight88_group_key(block: str) -> str:
     for line in block.splitlines():
         stripped = line.strip()
+        if not stripped:
+            continue
         tm = _TOURNAMENT_RE.match(stripped)
         if tm:
             return tm.group(1)
         cm = _CASH_TABLE_RE.match(stripped)
         if cm:
-            ts = _parse_played_on(block)
+            try:
+                ts = _parse_played_on(block)
+            except ValueError:
+                ts = "unknown-date"
             return f"cash|{ts}|{cm.group(1).strip()}|{cm.group(2)}"
+        if stripped.startswith("Seat ") or stripped.startswith("** Dealing"):
+            break
     raise ValueError("888 hand missing tournament/table line")
 
 
 def convert_888_hand(block: str) -> str:
-    if not is_888_new_format(block):
+    if not is_888_hand(block):
         return block
 
+    changed = False
     out: list[str] = []
+    append = out.append
     for line in block.splitlines():
         stripped = line.strip()
         if not stripped:
             continue
-        if _GAME_NO_RE.match(stripped):
+        if stripped[0] == "#" and _GAME_NO_RE.match(stripped):
+            changed = True
             continue
-        if _RUNOUT_MARKER_RE.match(stripped):
+        if stripped.startswith("** ") and _RUNOUT_MARKER_RE.match(stripped):
+            changed = True
             continue
-        stripped = _RUNOUT_PREFIX_RE.sub("", stripped)
-        out.append(stripped)
+        if (stripped[0] in ("F", "f", "S", "s")) and "runout " in stripped.lower():
+            new_line = _RUNOUT_PREFIX_RE.sub("", stripped)
+            if new_line != stripped:
+                changed = True
+                stripped = new_line
+        append(stripped)
 
+    if not changed:
+        return block
     return "\n".join(out).rstrip() + "\n"
 
 
@@ -92,7 +112,7 @@ def eight88_tournament_meta(block: str) -> tuple[str, str, str, str]:
         rest = tm.group(2).strip()
         buy = _BUYIN_RE.match(rest)
         if buy:
-            price = re.sub(r"\s+", "", buy.group(1))
+            price = _WS_RE.sub("", buy.group(1))
             name = buy.group(2).strip()
         else:
             price, name = "", rest

@@ -4,6 +4,9 @@ import re
 
 # Level I (75/150(20)) 2026/05/14 ...  ->  Level I (75/150(20)) - 2026/05/14 ...
 _LEVEL_DATE_NO_DASH_RE = re.compile(r"\)\s+(\d{4}/)")
+_LEVEL_DATE_WITH_DASH_RE = re.compile(r"\)\s+-\s+\d{4}/")
+_TOURNAMENT_OPEN_RE = re.compile(r"^Tournament\s+\(", re.I)
+_TOURNAMENT_ID_REST_RE = re.compile(r"^#(\d+),\s*(.+)$")
 
 # Table '451075 7'(1061498) 8-max  ->  Table '451075 7' 8-max
 _TABLE_INTERNAL_ID_RE = re.compile(r"^(Table\s+'[^']+')\(\d+\)(\s+)")
@@ -13,7 +16,7 @@ _PP_BUYIN_RE = re.compile(r"^(\$\S+)\s*(.+)$")
 def parse_pp_tournament_header(tail: str) -> tuple[str, str, str] | None:
     """Parse ``Tournament (name)#id, remainder``; name may contain nested ``(...)``."""
     trimmed = tail.strip()
-    open_m = re.match(r"^Tournament\s+\(", trimmed, flags=re.I)
+    open_m = _TOURNAMENT_OPEN_RE.match(trimmed)
     if not open_m:
         return None
 
@@ -34,7 +37,7 @@ def parse_pp_tournament_header(tail: str) -> tuple[str, str, str] | None:
 
     name = trimmed[name_start:idx]
     rest = trimmed[idx + 1 :].lstrip()
-    id_m = re.match(r"^#(\d+),\s*(.+)$", rest)
+    id_m = _TOURNAMENT_ID_REST_RE.match(rest)
     if not id_m:
         return None
     return name, id_m.group(1), id_m.group(2)
@@ -54,7 +57,7 @@ def parse_pp_tournament_header_with_buyin(tail: str) -> tuple[str, str, str, str
 
 def normalize_pp_header_timestamp(tail: str) -> str:
     """Ensure `` - `` before the UTC timestamp (required by Hand2Note parser)."""
-    if re.search(r"\)\s+-\s+\d{4}/", tail):
+    if _LEVEL_DATE_WITH_DASH_RE.search(tail):
         return tail
     return _LEVEL_DATE_NO_DASH_RE.sub(r") - \1", tail, count=1)
 

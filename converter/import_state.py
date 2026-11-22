@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 from pathlib import Path
@@ -93,7 +95,18 @@ def load_watch_store() -> ImportWatchStore:
 def save_watch_store(store: ImportWatchStore) -> None:
     path = import_state_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(store.to_json(), indent=2) + "\n", encoding="utf-8")
+    payload = json.dumps(store.to_json(), indent=2) + "\n"
+    fd, tmp_name = tempfile.mkstemp(prefix=".import_watch_", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(payload)
+        os.replace(tmp_name, path)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
 
 
 def load_watch_state() -> dict[str, FolderWatchState]:
@@ -150,6 +163,18 @@ def select_new_files(
             for p in folder.iterdir()
             if p.is_file() and p.suffix.lower() in suffixes
         )
+    seen_names: set[str] | None = None
+    seen_basenames: set[str] | None = None
+    if state.freshest_mtime_ns and state.processed_keys:
+        # Build O(1) lookup sets once instead of O(N*M) scanning processed_keys per file.
+        # Match exact relative paths or exact basenames (never arbitrary suffix substrings).
+        seen_names = set()
+        seen_basenames = set()
+        for k in state.processed_keys:
+            name_part = k.split("|", 1)[0]
+            seen_names.add(name_part)
+            seen_basenames.add(name_part.rsplit("/", 1)[-1])
+
     out: list[Path] = []
     for path in candidates:
         fp = FileFingerprint.from_path(path, root=folder if recursive else None)
@@ -157,18 +182,22 @@ def select_new_files(
             continue
         if fp.key() in state.processed_keys:
             continue
-        if state.freshest_mtime_ns and fp.mtime_ns < state.freshest_mtime_ns:
-            # Match legacy basename keys and recursive relative-path keys.
-            name_seen = any(
-                k.startswith(f"{fp.name}|")
-                or k.startswith(f"{fp.basename}|")
-                or k.split("|", 1)[0].endswith(fp.basename)
-                for k in state.processed_keys
-            )
-            if name_seen:
-                continue
+        if (
+            seen_names is not None
+            and seen_basenames is not None
+            and fp.mtime_ns < state.freshest_mtime_ns
+            and (fp.name in seen_names or fp.basename in seen_basenames)
+        ):
+            continue
         out.append(path)
     return out
+
+
+def _key_mtime_ns(key: str) -> int:
+    try:
+        return int(key.rsplit("|", 1)[-1])
+    except ValueError:
+        return 0
 
 
 def mark_processed(
@@ -186,7 +215,8 @@ def mark_processed(
         keys.add(fp.key())
         freshest = max(freshest, fp.mtime_ns)
     if len(keys) > 5000:
-        keys = set(sorted(keys)[-4000:])
+        # Keep the 4,000 most recent entries by mtime rather than sorting alphabetically.
+        keys = set(sorted(keys, key=lambda k: (_key_mtime_ns(k), k))[-4000:])
     return FolderWatchState(processed_keys=keys, freshest_mtime_ns=freshest)
 
 
