@@ -62,13 +62,21 @@ def _read_first_nonempty_line(zf: zipfile.ZipFile, info: zipfile.ZipInfo) -> str
     return ""
 
 
+def _is_macos_metadata_member(filename: str) -> bool:
+    parts = filename.replace("\\", "/").split("/")
+    if "__MACOSX" in parts:
+        return True
+    name = parts[-1]
+    return name.startswith("._")
+
+
 def zip_looks_like_hand_history(path: Path) -> bool:
     """Quick probe: zip contains raw HH/summary .txt (not already-converted PokerStars)."""
     try:
         with zipfile.ZipFile(path) as zf:
             checked = 0
             for info in zf.infolist():
-                if info.is_dir():
+                if info.is_dir() or _is_macos_metadata_member(info.filename):
                     continue
                 name = Path(info.filename).name
                 if not name.lower().endswith(".txt"):
@@ -94,7 +102,7 @@ def classify_zip(path: Path) -> list[ZipMember]:
     try:
         with zipfile.ZipFile(path) as zf:
             for info in zf.infolist():
-                if info.is_dir():
+                if info.is_dir() or _is_macos_metadata_member(info.filename):
                     continue
                 name = Path(info.filename).name
                 if not name.lower().endswith(".txt"):

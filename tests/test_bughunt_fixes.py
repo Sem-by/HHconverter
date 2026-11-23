@@ -452,6 +452,18 @@ class ZipWatchEngineSettingsTests(unittest.TestCase):
             self.assertEqual(extracted.parent.resolve(), out_dir.resolve())
             self.assertTrue(extracted.is_file())
 
+    def test_zip_probe_ignores_macos_appledouble_entries(self) -> None:
+        gg_hand = "Poker Hand #TM5730000001: Tournament #1, $5 Hold'em No Limit - Level1(10/20) - 2026/08/17 12:00:00\n"
+        with tempfile.TemporaryDirectory() as td:
+            zpath = Path(td) / "macos.zip"
+            with zipfile.ZipFile(zpath, "w") as zf:
+                for i in range(12):
+                    zf.writestr(f"__MACOSX/._junk_{i}.txt", b"\x00\x05\x16\x07Mac OS X")
+                zf.writestr("GG20260817-1.txt", gg_hand)
+            self.assertTrue(zip_looks_like_hand_history(zpath))
+            members = classify_zip(zpath)
+            self.assertEqual([m.member_name for m in members], ["GG20260817-1.txt"])
+
     def test_select_new_files_does_not_false_match_suffix_and_prunes_by_mtime(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             folder = Path(td)
