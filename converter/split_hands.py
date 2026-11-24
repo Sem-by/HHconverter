@@ -14,14 +14,23 @@ _HAND_START_PREFIXES = (
     "PokerStars Hand #",
     "***** 888poker Hand History",
 )
+_START_CHARS = frozenset("PC1*#\ufeff \t")
 _GAME_NO_LINE_RE = re.compile(r"^#Game No\s*:", re.I)
+_BODY_ACTION_RE = re.compile(
+    r":\s*(?:folds|checks|calls|bets|raises|posts|shows|mucks|doesn't|does not|"
+    r"ALLIN|RETURN|sits out|is sitting out|has timed out|is disconnected|"
+    r"is connected|has returned)\b|\ssaid,\s",
+    re.I,
+)
 
 
 def iter_hand_blocks(path: Path) -> Iterable[str]:
     # utf-8-sig strips a leading BOM so the first hand is recognized
     text = path.read_text(encoding="utf-8-sig", errors="replace")
-    lines = text.splitlines()
     buf: list[str] = []
+    append = buf.append
+    starts_new = _starts_new_hand
+    start_chars = _START_CHARS
 
     def flush() -> str | None:
         if not buf:
@@ -30,21 +39,27 @@ def iter_hand_blocks(path: Path) -> Iterable[str]:
         buf.clear()
         return block or None
 
-    for raw in lines:
-        line = raw.rstrip("\r")
-        if _starts_new_hand(line) and buf:
-            if _is_888_preamble(buf):
-                buf.append(line)
-                continue
-            done = flush()
-            if done:
-                yield done
-            buf.append(line)
+    for line in text.splitlines():
+        is_start = False
+        if line:
+            ch = line[0]
+            if ch in ("P", "C", "1", "*"):
+                if line.startswith(_HAND_START_PREFIXES) and not _BODY_ACTION_RE.search(line):
+                    is_start = True
+            elif ch in ("#", "\ufeff", " ", "\t"):
+                is_start = starts_new(line)
+        if is_start:
+            cleaned = _strip_leading_bom(line)
+            if buf:
+                if _is_888_preamble(buf) and cleaned.lstrip().startswith("***** 888poker Hand History"):
+                    append(cleaned)
+                    continue
+                done = flush()
+                if done:
+                    yield done
+            append(cleaned)
             continue
-        if _starts_new_hand(line):
-            buf.append(line)
-            continue
-        buf.append(line)
+        append(line)
 
     last = flush()
     if last:
@@ -53,16 +68,38 @@ def iter_hand_blocks(path: Path) -> Iterable[str]:
 
 def _starts_new_hand(line: str) -> bool:
     s = _strip_bom(line.lstrip())
-    return any(s.startswith(prefix) for prefix in _HAND_START_PREFIXES)
+    if not s:
+        return False
+    if s.startswith(_HAND_START_PREFIXES):
+        # Guard against a player nicknamed like a hand header performing an action/chat.
+        if _BODY_ACTION_RE.search(s):
+            return False
+        return True
+    return bool(_GAME_NO_LINE_RE.match(s))
 
 
 def _strip_bom(text: str) -> str:
-    return text.removeprefix("\ufeff")
+    return text.lstrip("\ufeff")
+
+
+def _strip_leading_bom(line: str) -> str:
+    if "\ufeff" in line:
+        stripped = line.lstrip()
+        if stripped.startswith("\ufeff"):
+            return stripped.lstrip("\ufeff")
+    return line
 
 
 def _is_888_preamble(buf: list[str]) -> bool:
-    nonempty = [ln.strip() for ln in buf if ln.strip()]
-    return bool(nonempty) and all(_GAME_NO_LINE_RE.match(ln) for ln in nonempty)
+    has_game_no = False
+    for ln in buf:
+        stripped = ln.strip()
+        if not stripped:
+            continue
+        if not _GAME_NO_LINE_RE.match(stripped):
+            return False
+        has_game_no = True
+    return has_game_no
 
 
 _POKER_HAND_HEADER_RE = re.compile(r"Poker Hand #([^\s:]+)")

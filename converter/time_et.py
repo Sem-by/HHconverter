@@ -15,12 +15,33 @@ _DATETIME_RE = r"(\d{4}[/-]\d{2}[/-]\d{2} \d{1,2}:\d{2}:\d{2})"
 _OFFSET_RE = re.compile(
     rf"{_DATETIME_RE}\s+"
     r"(?:(?:GMT|UTC)\s*)?"
-    r"([+-])(\d{1,2})(?::?(\d{2}))?(?::\d{2})?\b",
+    r"([+-])(\d{1,2})(?::?(\d{2}))?(?::\d{2})?\s*$",
     re.I,
 )
 
 # Letter abbreviations after the datetime (EST, MSK, AEDT, …).
-_NAMED_TZ_RE = re.compile(rf"{_DATETIME_RE}\s+([A-Za-z]{{2,6}})\b", re.I)
+_NAMED_TZ_RE = re.compile(rf"{_DATETIME_RE}\s+([A-Za-z]{{2,6}})\s*$", re.I)
+_PLAIN_DATETIME_RE = re.compile(rf"{_DATETIME_RE}\s*$")
+_ET_BRACKETS_RE = re.compile(r"\s*\[[^\]]*\]\s*$")
+_LEVEL_NUM_RE = re.compile(r"-\s*Level\s*(\d+)\s*(\([\s\S]*$)")
+
+_ROMAN_NUMERALS: tuple[tuple[int, str], ...] = (
+    (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"),
+    (100, "C"), (90, "XC"), (50, "L"), (40, "XL"),
+    (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"),
+)
+
+
+def _compute_roman(n: int) -> str:
+    parts: list[str] = []
+    for value, numeral in _ROMAN_NUMERALS:
+        count, n = divmod(n, value)
+        if count:
+            parts.append(numeral * count)
+    return "".join(parts)
+
+
+_ROMAN_CACHE: tuple[str, ...] = tuple(_compute_roman(i) for i in range(256))
 
 # Prefer these IANA zones when an abbreviation is shared by many regions
 # (EST/CST/IST/…). Poker rooms / CoinPoker / PokerStars skew North America / EU.
@@ -124,25 +145,19 @@ _MANUAL_ABBREVS: dict[str, str] = {
 
 
 def int_to_roman(n: int) -> str | None:
-    """Roman numerals for typical tournament blinds levels (bounded)."""
+    """Roman numerals for tournament blind levels (1..3999)."""
 
-    if n < 1 or n > 49:
+    if n < 1 or n > 3999:
         return None
-
-    tens, ones = divmod(n, 10)
-    if tens == 4:
-        prefix = "XL"
-    elif 0 <= tens <= 3:
-        prefix = "X" * tens
-    else:
-        prefix = ""
-
-    digit_roman = ("", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX")
-    return prefix + digit_roman[ones]
+    if n < 256:
+        return _ROMAN_CACHE[n]
+    return _compute_roman(n)
 
 
 def strip_existing_et_brackets(line: str) -> str:
-    return re.sub(r"\s*\[[^\]]*\]\s*$", "", line).rstrip()
+    if "]" not in line:
+        return line.rstrip()
+    return _ET_BRACKETS_RE.sub("", line).rstrip()
 
 
 def strip_trailing_timestamp_token(line: str) -> str:
@@ -161,12 +176,7 @@ def normalize_level_piece(line: str) -> str:
         roman = int_to_roman(lvl) or str(lvl)
         return f"- Level {roman} {m.group(2).lstrip()}"
 
-    return re.sub(
-        r"-\s*Level\s*(\d+)\s*(\([\s\S]*$)",
-        repl,
-        line,
-        count=1,
-    )
+    return _LEVEL_NUM_RE.sub(repl, line, count=1)
 
 
 def format_pokerstars_timestamp(dt: datetime, *, suffix: str = "UTC") -> str:
@@ -177,18 +187,23 @@ def format_pokerstars_timestamp(dt: datetime, *, suffix: str = "UTC") -> str:
     )
 
 
+@lru_cache(maxsize=64)
+def _get_zoneinfo(zone_name: str) -> ZoneInfo:
+    return ZoneInfo(zone_name)
+
+
 def append_utc_bracket_et(header_line: str) -> tuple[str | None, str]:
     cleaned = strip_existing_et_brackets(header_line.rstrip())
-    utc_dt = parse_header_timestamp(cleaned)
-    if utc_dt is None:
+    parsed = _parse_timestamp_with_span(cleaned)
+    if parsed is None:
         return ("Could not parse timestamp on header line.", header_line)
 
+    utc_dt, start_idx = parsed
     utc_piece = format_pokerstars_timestamp(utc_dt, suffix="UTC")
-    prefix = strip_trailing_timestamp_token(cleaned).rstrip()
+    prefix = cleaned[:start_idx].rstrip()
 
     try:
-        et = utc_dt.astimezone(ZoneInfo("America/New_York"))
-
+        et = utc_dt.astimezone(_get_zoneinfo("America/New_York"))
     except ZoneInfoNotFoundError:
         return (
             "Missing IANA zone data (often Windows): install with `python -m pip install tzdata`",
@@ -199,13 +214,48 @@ def append_utc_bracket_et(header_line: str) -> tuple[str | None, str]:
     return None, f"{prefix} {utc_piece} {et_piece}"
 
 
-def _strptime_header_dt(raw: str) -> datetime:
+def _strptime_header_dt(raw: str) -> datetime | None:
+    """Fast parser for ``YYYY/MM/DD H:MM:SS`` or ``YYYY-MM-DD HH:MM:SS``."""
+    # Length is 18 (1-digit hour) or 19 (2-digit hour).
+    n = len(raw)
+    if n == 19:
+        try:
+            return datetime(
+                int(raw[0:4]),
+                int(raw[5:7]),
+                int(raw[8:10]),
+                int(raw[11:13]),
+                int(raw[14:16]),
+                int(raw[17:19]),
+            )
+        except ValueError:
+            return None
+    if n == 18:
+        try:
+            return datetime(
+                int(raw[0:4]),
+                int(raw[5:7]),
+                int(raw[8:10]),
+                int(raw[11:12]),
+                int(raw[13:15]),
+                int(raw[16:18]),
+            )
+        except ValueError:
+            return None
     fmt = "%Y/%m/%d %H:%M:%S" if "/" in raw else "%Y-%m-%d %H:%M:%S"
-    return datetime.strptime(raw, fmt)
+    try:
+        return datetime.strptime(raw, fmt)
+    except ValueError:
+        return None
 
 
-def _offset_timezone(sign: str, hours: str, minutes: str | None) -> timezone:
-    total = int(hours) * 60 + int(minutes or 0)
+def _offset_timezone(sign: str, hours: str, minutes: str | None) -> timezone | None:
+    mins = int(minutes or 0)
+    if mins >= 60:
+        return None
+    total = int(hours) * 60 + mins
+    if total >= 24 * 60:
+        return None
     if sign == "-":
         total = -total
     return timezone(timedelta(minutes=total))
@@ -213,20 +263,17 @@ def _offset_timezone(sign: str, hours: str, minutes: str | None) -> timezone:
 
 def _timestamp_match_span(line: str) -> tuple[int, int] | None:
     """Start/end of ``datetime + optional tz`` at the end of a header line."""
-    offset_m = None
-    for m in _OFFSET_RE.finditer(line):
-        offset_m = m
-    if offset_m and offset_m.end() == len(line.rstrip()):
+    trimmed = line.rstrip()
+    offset_m = _OFFSET_RE.search(trimmed)
+    if offset_m:
         # Prefer offset over a bare ``UTC`` word that is part of ``UTC+3``.
         return offset_m.start(), offset_m.end()
 
-    named_m = None
-    for m in _NAMED_TZ_RE.finditer(line):
-        named_m = m
-    if named_m and named_m.end() == len(line.rstrip()):
+    named_m = _NAMED_TZ_RE.search(trimmed)
+    if named_m:
         return named_m.start(), named_m.end()
 
-    plain_m = re.search(rf"{_DATETIME_RE}\s*$", line)
+    plain_m = _PLAIN_DATETIME_RE.search(trimmed)
     if plain_m:
         return plain_m.start(), plain_m.end()
     return None
@@ -273,38 +320,51 @@ def _abbrev_to_zone() -> dict[str, str]:
 
 def resolve_tz_abbrev(abbrev: str) -> str | None:
     """Return IANA zone name for a header abbreviation, or None if unknown."""
-    return _abbrev_to_zone().get(abbrev.strip().upper())
+    key = abbrev.strip().upper()
+    manual = _MANUAL_ABBREVS.get(key)
+    if manual is not None:
+        return manual
+    return _abbrev_to_zone().get(key)
 
 
-def parse_header_timestamp(line: str) -> datetime | None:
-    cleaned = strip_existing_et_brackets(line).rstrip()
-
+def _parse_timestamp_with_span(cleaned: str) -> tuple[datetime, int] | None:
     # Numeric / GMT± / UTC± offsets first (covers ``+03``, ``-05:00``, ``GMT+8``).
-    offset_m = None
-    for m in _OFFSET_RE.finditer(cleaned):
-        offset_m = m
-    if offset_m and offset_m.end() == len(cleaned):
+    offset_m = _OFFSET_RE.search(cleaned)
+    if offset_m:
         naive = _strptime_header_dt(offset_m.group(1))
         tz = _offset_timezone(offset_m.group(2), offset_m.group(3), offset_m.group(4))
-        return naive.replace(tzinfo=tz).astimezone(_UTC_ZONE)
+        if naive is None or tz is None:
+            return None
+        return naive.replace(tzinfo=tz).astimezone(_UTC_ZONE), offset_m.start()
 
-    named_m = None
-    for m in _NAMED_TZ_RE.finditer(cleaned):
-        named_m = m
-    if named_m and named_m.end() == len(cleaned):
+    named_m = _NAMED_TZ_RE.search(cleaned)
+    if named_m:
+        naive = _strptime_header_dt(named_m.group(1))
+        if naive is None:
+            return None
         zone_name = resolve_tz_abbrev(named_m.group(2))
         if zone_name:
-            naive = _strptime_header_dt(named_m.group(1))
+            if zone_name in ("UTC", "Etc/UTC"):
+                return naive.replace(tzinfo=_UTC_ZONE), named_m.start()
             try:
-                return naive.replace(tzinfo=ZoneInfo(zone_name)).astimezone(_UTC_ZONE)
+                return naive.replace(tzinfo=_get_zoneinfo(zone_name)).astimezone(_UTC_ZONE), named_m.start()
             except ZoneInfoNotFoundError:
                 return None
         # Unknown letter token: still recover the wall-clock as UTC so Convert
         # does not abort; export/Dropbox day stays usable.
-        return _strptime_header_dt(named_m.group(1)).replace(tzinfo=_UTC_ZONE)
+        return naive.replace(tzinfo=_UTC_ZONE), named_m.start()
 
-    iso_m = re.search(rf"{_DATETIME_RE}\s*$", cleaned)
+    iso_m = _PLAIN_DATETIME_RE.search(cleaned)
     if iso_m:
-        return _strptime_header_dt(iso_m.group(1)).replace(tzinfo=_UTC_ZONE)
+        naive = _strptime_header_dt(iso_m.group(1))
+        if naive is None:
+            return None
+        return naive.replace(tzinfo=_UTC_ZONE), iso_m.start()
 
     return None
+
+
+def parse_header_timestamp(line: str) -> datetime | None:
+    cleaned = strip_existing_et_brackets(line).rstrip()
+    parsed = _parse_timestamp_with_span(cleaned)
+    return parsed[0] if parsed is not None else None

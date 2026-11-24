@@ -30,7 +30,7 @@ _ROOM_ABBREV = {
 _PP_HEADER_RE = re.compile(r"PokerPlanets\s+Hand\s+#\d+\s*:\s*(.+)", re.I)
 _GG_HEADER_RE = re.compile(r"Poker\s+Hand\s+#\S+\s*:\s*(.+)", re.I)
 _GG_TOURNAMENT_RE = re.compile(
-    r"^Tournament\s+#(\d+),\s*(.+?)\s+Hold'em\b",
+    r"^Tournament\s+#(\d+),\s*(.+?)\s+(?:Hold'?em|Omaha|Short\s+Deck)\b",
     re.I,
 )
 _GG_CASH_STAKES_RE = re.compile(
@@ -48,7 +48,14 @@ _COIN_LEGACY_TITLE_RE = re.compile(
     re.I,
 )
 _USD_PRICE_RE = re.compile(r"\$[\d.]+(?:\+\$[\d.]+)?")
+_USD_PART_RE = re.compile(r"\$([\d.]+)")
+_LEADING_USD_RE = re.compile(r"^\$[\d.]+\S*\s+")
+_TRAILING_USD_RE = re.compile(r"\s+\$[\d.]+\S*$")
+_TOURNAMENT_ID_RE = re.compile(r"Tournament\s+#(\d+)", re.I)
+_NON_NUM_RE = re.compile(r"[^\d,.]+")
+_WS_RE = re.compile(r"\s+")
 _INVALID_FILENAME_CHARS_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_MAX_FILENAME_PART_LEN = 120
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,7 +86,7 @@ def tournament_meta_from_blocks(room: str, blocks: list[str]) -> TournamentMeta:
     if not blocks:
         raise ValueError(f"No hands to derive tournament metadata for {room}")
 
-    first = blocks[0].splitlines()[0].strip()
+    first = blocks[0].partition("\n")[0].strip()
     if room == "poker_planets":
         return _pp_meta(first)
     if room == "ggpoker_ok":
@@ -112,7 +119,7 @@ def _pp_meta(header: str) -> TournamentMeta:
 
 
 def _gg_meta(block_or_header: str) -> TournamentMeta:
-    header = block_or_header.splitlines()[0].strip() if "\n" in block_or_header else block_or_header
+    header = block_or_header.partition("\n")[0].strip()
     header = restore_poker_hand_header_colon(header)
     m = _GG_HEADER_RE.match(header)
     if not m:
@@ -134,8 +141,8 @@ def _gg_meta(block_or_header: str) -> TournamentMeta:
 
     tid, name_part = tm.group(1), tm.group(2).strip()
     price = _extract_usd_price(name_part) or ""
-    name = re.sub(r"^\$[\d.]+\S*\s+", "", name_part).strip()
-    name = re.sub(r"\s+\$[\d.]+\S*$", "", name).strip()
+    name = _LEADING_USD_RE.sub("", name_part).strip()
+    name = _TRAILING_USD_RE.sub("", name).strip()
     if price and (not name or name == price):
         name = ""
     if not name and not price:
@@ -146,7 +153,7 @@ def _gg_meta(block_or_header: str) -> TournamentMeta:
 
 def _up_meta(header: str) -> TournamentMeta:
     meta = _gg_meta(header)
-    raw_tid_m = re.search(r"Tournament\s+#(\d+)", header, re.I)
+    raw_tid_m = _TOURNAMENT_ID_RE.search(header)
     raw_tid = raw_tid_m.group(1) if raw_tid_m else meta.tournament_id
     return TournamentMeta(
         "uppoker",
@@ -171,15 +178,15 @@ def _onewin_meta(block: str) -> TournamentMeta:
 
 
 def _coin_meta(block: str) -> TournamentMeta:
-    header = block.splitlines()[0].strip()
+    header = block.partition("\n")[0].strip()
     played = _header_date(header)
 
     if is_coin_cash_hand(block):
         stakes = _COIN_CASH_STAKES_RE.search(header)
         if not stakes:
             raise ValueError(f"Unrecognized CoinPoker cash stakes: {header!r}")
-        sb = format_stakes_int(float(normalize_money(re.sub(r"[^\d,.]+", "", stakes.group(1)))))
-        bb = format_stakes_int(float(normalize_money(re.sub(r"[^\d,.]+", "", stakes.group(2)))))
+        sb = format_stakes_int(float(normalize_money(_NON_NUM_RE.sub("", stakes.group(1)))))
+        bb = format_stakes_int(float(normalize_money(_NON_NUM_RE.sub("", stakes.group(2)))))
         price = f"${sb}-${bb}"
         return TournamentMeta("coinpoker", f"cash-{sb}-{bb}", price, "Cash", played)
 
@@ -202,7 +209,7 @@ def _extract_usd_price(text: str) -> str | None:
 
 
 def _shorten_pp_price(price: str) -> str:
-    parts = [f"${_shorten_decimal_zeros(m.group(1))}" for m in re.finditer(r"\$([\d.]+)", price)]
+    parts = [f"${_shorten_decimal_zeros(m.group(1))}" for m in _USD_PART_RE.finditer(price)]
     return "+".join(parts) if parts else price
 
 
@@ -224,5 +231,7 @@ def _header_date(text: str) -> date:
 
 def _sanitize_filename_part(text: str) -> str:
     cleaned = _INVALID_FILENAME_CHARS_RE.sub("", text)
-    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    cleaned = _WS_RE.sub(" ", cleaned).strip().rstrip(" .")
+    if len(cleaned) > _MAX_FILENAME_PART_LEN:
+        cleaned = cleaned[:_MAX_FILENAME_PART_LEN].rstrip(" .")
     return cleaned

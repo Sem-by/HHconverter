@@ -4,7 +4,10 @@ import re
 
 from converter.player_names import PP_PLAYER_TOKEN, parse_seat_stacks
 
-_DEALT_TO_RE = re.compile(r"^Dealt to (\S+)", re.MULTILINE)
+_DEALT_TO_RE = re.compile(
+    r"^Dealt to (.+?)(?:\s+\[(?:10|[2-9TJQKA])[cdhs](?:\s+(?:10|[2-9TJQKA])[cdhs])*\])?\s*$",
+    re.MULTILINE | re.I,
+)
 
 
 def detect_pp_hero_token(blocks: list[str]) -> str:

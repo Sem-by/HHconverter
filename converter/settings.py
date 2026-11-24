@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -115,6 +117,10 @@ def load_settings(config_path: Path) -> Settings:
     if dropbox_mode != "original":
         clear_folders = False
 
+    for required_key in ("import_path", "export_path", "player_alias"):
+        if required_key not in data:
+            raise ValueError(f"Missing required setting {required_key!r} in {config_path}")
+
     return Settings(
         import_path=_path_from_config(data["import_path"]),
         export_path=_path_from_config(data["export_path"]),
@@ -149,21 +155,40 @@ def coin_cpr_alias_alert_pending(config_path: Path) -> bool:
     return not bool(data.get("coin_cpr_alias_alert_shown", False))
 
 
+def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(data, indent=2) + "\n"
+    fd, tmp_name = tempfile.mkstemp(prefix=".config_", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(payload)
+        os.replace(tmp_name, path)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
 def mark_coin_cpr_alias_alert_shown(config_path: Path) -> None:
     if config_path.is_file():
-        data = _read_json(config_path)
+        try:
+            data = _read_json(config_path)
+        except ValueError:
+            data = {}
     else:
         data = {}
     data["coin_cpr_alias_alert_shown"] = True
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    with config_path.open("w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2)
-        fh.write("\n")
+    _atomic_write_json(config_path, data)
 
 
 def save_settings(config_path: Path, settings: Settings) -> None:
     if config_path.is_file():
-        data = _read_json(config_path)
+        try:
+            data = _read_json(config_path)
+        except ValueError:
+            data = {}
     else:
         data = {}
 
@@ -194,10 +219,7 @@ def save_settings(config_path: Path, settings: Settings) -> None:
     data["ui_language"] = normalize_language(settings.ui_language)
     data.pop("room_seat_tokens", None)
 
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    with config_path.open("w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2)
-        fh.write("\n")
+    _atomic_write_json(config_path, data)
 
 
 def _optional_path(value: Any) -> Path | None:
@@ -227,10 +249,13 @@ def _path_str(path: Path) -> str:
 def _read_json(path: Path) -> dict[str, Any]:
     try:
         with path.open(encoding="utf-8") as fh:
-            return json.load(fh)
+            data = json.load(fh)
     except json.JSONDecodeError as exc:
         raise ValueError(
             f"Invalid JSON in {path} ({exc}). "
             "Windows paths must use forward slashes (C:/folder/file) "
             "or escaped backslashes (C:\\\\folder\\\\file)."
         ) from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"Expected JSON object in {path}, got {type(data).__name__}.")
+    return data

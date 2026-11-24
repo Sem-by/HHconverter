@@ -7,33 +7,52 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 _SEAT_LINE_RE = re.compile(
-    r"^Seat \d+:\s+(\S+)\s+\([₮$€]?([\d,]+(?:\.\d+)?)\s+in chips\)",
+    r"^Seat \d+:\s+(.+?)\s+\([₮$€]?([\d,]+(?:\.\d+)?)\s+in chips\)",
     re.MULTILINE,
 )
 _TABLE_ID_RE = re.compile(
     r"^Table\s+'(.+?)'\s+\d+-max\s+Seat\s+#\d+\s+is\s+the\s+button\s*$",
     re.I | re.M,
 )
+_HAND_ID_RE = re.compile(r"Hand\s+#(\d+)")
 _MONEY_AMT = r"[₮$€]?([\d,]+(?:\.\d+)?)"
-_POST_RE = re.compile(
-    rf"^(\S+):\s+posts(?:\s+(?:the\s+)?(?:small\s+blind|big\s+blind|ante))?\s+{_MONEY_AMT}",
+_POST_BLIND_RE = re.compile(
+    rf"^(.+?):\s+posts\s+(?:small|big)\s+blind\s+{_MONEY_AMT}",
     re.I,
 )
-_BET_RE = re.compile(rf"^(\S+):\s+bets\s+{_MONEY_AMT}", re.I)
-_CALL_RE = re.compile(rf"^(\S+):\s+calls\s+{_MONEY_AMT}", re.I)
+_POST_ANTE_RE = re.compile(
+    rf"^(.+?):\s+posts\s+(?:the\s+)?ante\s+{_MONEY_AMT}",
+    re.I,
+)
+_POST_GENERIC_RE = re.compile(
+    rf"^(.+?):\s+posts\s+{_MONEY_AMT}",
+    re.I,
+)
+_BET_RE = re.compile(rf"^(.+?):\s+bets\s+{_MONEY_AMT}", re.I)
+_ALLIN_RE = re.compile(rf"^(.+?):\s+ALLIN\s+{_MONEY_AMT}", re.I)
+_CALL_RE = re.compile(rf"^(.+?):\s+calls\s+{_MONEY_AMT}", re.I)
 _RAISE_RE = re.compile(
-    rf"^(\S+):\s+raises\s+{_MONEY_AMT}\s+to\s+{_MONEY_AMT}",
+    rf"^(.+?):\s+raises\s+{_MONEY_AMT}\s+to\s+{_MONEY_AMT}",
     re.I,
 )
-_RETURN_RE = re.compile(rf"^(\S+):\s+RETURN\s+{_MONEY_AMT}", re.I)
+_RETURN_RE = re.compile(rf"^(.+?):\s+RETURN\s+{_MONEY_AMT}", re.I)
 _UNCALLED_RE = re.compile(
-    rf"^Uncalled bet\s+\({_MONEY_AMT}\)\s+returned to\s+(\S+)",
+    rf"^Uncalled bet\s+\({_MONEY_AMT}\)\s+returned to\s+(.+?)\s*$",
     re.I,
 )
-_COLLECTED_RE = re.compile(rf"^(\S+)\s+collected\s+{_MONEY_AMT}\s+from\s+pot", re.I)
+_COLLECTED_RE = re.compile(rf"^(.+?)\s+collected\s+{_MONEY_AMT}\s+from\s+pot", re.I)
 _STREET_RE = re.compile(
-    r"^\*\*\*\s+(HOLE CARDS|FLOP|TURN|RIVER|SHOW\s*DOWN|SHOWDOWN|SUMMARY)\s*\*\*\*",
+    r"^\*\*\*\s+(?:(?:FIRST|SECOND)\s+)?(HOLE CARDS|FLOP|TURN|RIVER|SHOW\s*DOWN|SHOWDOWN|SUMMARY)\s*\*\*\*",
     re.I,
+)
+_HEADER_OR_TABLE_PREFIXES = (
+    "PokerStars Hand #",
+    "Poker Hand #",
+    "CoinPoker Hand #",
+    "PokerPlanets Hand #",
+    "1WinPoker Hand #",
+    "Table '",
+    "Tournament '",
 )
 
 _FIRST = (
@@ -47,9 +66,46 @@ _LAST = (
     "Dune", "Grove", "Haven", "Mist", "Reed", "Sand", "Vale", "Wood",
     "Creek", "Field", "Harbor", "Knoll", "Meadow", "Pine", "Shore", "Trail",
 )
+_BASE_NAMES: tuple[str, ...] = tuple(f"{f}{l}" for f in _FIRST for l in _LAST)
 
 PP_PLAYER_TOKEN = re.compile(r"^Player\d+$").match
 COIN_PLAYER_TOKEN = re.compile(r"^[0-9a-f]{8}$", re.I).match
+
+
+class _NamePool:
+    """O(1) random unique name generator (no dead spin once base names are exhausted)."""
+
+    def __init__(self, name_suffix: str, rng: random.Random) -> None:
+        self._suffix = name_suffix
+        self._rng = rng
+        self._used: set[str] = set()
+        self._available: list[str] = []
+        self._suffix_num = 1
+        self._refill()
+
+    def _refill(self) -> None:
+        pool = list(_BASE_NAMES)
+        self._rng.shuffle(pool)
+        self._available = pool
+
+    def next_name(self) -> str:
+        while True:
+            if not self._available:
+                self._suffix_num += 1
+                self._refill()
+            base = self._available.pop()
+            if self._suffix_num == 1:
+                name = f"{base}{self._suffix}"
+            else:
+                name = f"{base}{self._suffix_num}{self._suffix}"
+            if name not in self._used:
+                self._used.add(name)
+                return name
+
+    def reset(self) -> None:
+        self._used.clear()
+        self._suffix_num = 1
+        self._refill()
 
 
 def _to_chip_units(raw: str) -> int:
@@ -92,7 +148,7 @@ class PlayerNameSession:
         self._name_suffix = name_suffix
         self._should_rename = should_rename
         self._rng = rng or random.Random()
-        self._used_names: set[str] = set()
+        self._pool = _NamePool(name_suffix, self._rng)
         self._prev_end = _StackNameMap()
         self._prev_token_names: dict[str, str] = {}
 
@@ -125,23 +181,10 @@ class PlayerNameSession:
         return text
 
     def _new_name(self) -> str:
-        for _ in range(2000):
-            name = f"{self._rng.choice(_FIRST)}{self._rng.choice(_LAST)}{self._name_suffix}"
-            if name not in self._used_names:
-                self._used_names.add(name)
-                return name
-
-        base = f"{self._rng.choice(_FIRST)}{self._rng.choice(_LAST)}"
-        suffix_num = 2
-        while True:
-            name = f"{base}{suffix_num}{self._name_suffix}"
-            if name not in self._used_names:
-                self._used_names.add(name)
-                return name
-            suffix_num += 1
+        return self._pool.next_name()
 
     def reset(self) -> None:
-        self._used_names.clear()
+        self._pool.reset()
         self._prev_end = _StackNameMap()
         self._prev_token_names = {}
 
@@ -152,6 +195,10 @@ class _TableEndState:
 
     name_stacks: dict[str, int]
     all_stacks: list[int]
+    all_stacks_counts: Counter[int] = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.all_stacks_counts = Counter(self.all_stacks)
 
 
 class CashMultiTableNameSession:
@@ -172,12 +219,12 @@ class CashMultiTableNameSession:
         self._name_suffix = name_suffix
         self._should_rename = should_rename
         self._rng = rng or random.Random()
-        self._used_names: set[str] = set()
+        self._pool = _NamePool(name_suffix, self._rng)
         # (table_id, hand_id_prefix) -> last end-of-hand state for that session
         self._by_session: dict[tuple[str, int], _TableEndState] = {}
 
     def reset(self) -> None:
-        self._used_names.clear()
+        self._pool.reset()
         self._by_session.clear()
 
     def map_players(self, text: str) -> str:
@@ -205,7 +252,7 @@ class CashMultiTableNameSession:
             hand_map[token] = name
             taken.add(name)
 
-        end_by_token = compute_end_stacks_cents(text)
+        end_by_token = compute_end_stacks_cents(text, initial_seats=seats)
         name_stacks: dict[str, int] = {}
         for token, start_stack in targets:
             name = hand_map.get(token)
@@ -237,7 +284,7 @@ class CashMultiTableNameSession:
         for (tid, _prefix), state in self._by_session.items():
             if tid != table_id or not state.all_stacks:
                 continue
-            score = _multiset_overlap(start_c, Counter(state.all_stacks))
+            score = _multiset_overlap(start_c, state.all_stacks_counts)
             if score > best_score:
                 best_score = score
                 best = state
@@ -277,22 +324,25 @@ class CashMultiTableNameSession:
                 prev_by_stack[stack] = [n for n in prev_by_stack[stack] if n != name]
 
         # Pass 2: ambiguous stacks — score by companion-stack multiset overlap.
+        curr_counts: Counter[int] | None = None
         for stack, tokens in curr_by_stack.items():
             names = [n for n in prev_by_stack.get(stack, []) if n not in taken]
             if not tokens or not names:
                 continue
+            if curr_counts is None:
+                curr_counts = Counter(all_stacks)
+            companions = _companions_from_counter(curr_counts, stack)
             for token in list(tokens):
                 if token in hand_map:
                     continue
-                companions = _companions(all_stacks, stack)
                 best_name: str | None = None
                 best_score = -1
                 tied = False
                 for name in names:
                     if name in taken:
                         continue
-                    prev_companions = _companions(
-                        prev.all_stacks,
+                    prev_companions = _companions_from_counter(
+                        prev.all_stacks_counts,
                         prev.name_stacks[name],
                     )
                     score = _multiset_overlap(companions, prev_companions)
@@ -315,33 +365,21 @@ class CashMultiTableNameSession:
                 taken.add(left_names[0])
 
     def _new_name(self) -> str:
-        for _ in range(2000):
-            name = f"{self._rng.choice(_FIRST)}{self._rng.choice(_LAST)}{self._name_suffix}"
-            if name not in self._used_names:
-                self._used_names.add(name)
-                return name
-
-        base = f"{self._rng.choice(_FIRST)}{self._rng.choice(_LAST)}"
-        suffix_num = 2
-        while True:
-            name = f"{base}{suffix_num}{self._name_suffix}"
-            if name not in self._used_names:
-                self._used_names.add(name)
-                return name
-            suffix_num += 1
+        return self._pool.next_name()
 
 
 def cash_hand_session_prefix(text: str) -> int | None:
     """Coin hand-id high digits identify a table session (low digits = sequence)."""
-    m = re.search(r"Hand\s+#(\d+)", text)
+    first_line = text.partition("\n")[0]
+    m = _HAND_ID_RE.search(first_line)
     if not m:
         return None
     return int(m.group(1)) // 100_000
 
 
-def _companions(stacks: list[int], self_stack: int) -> Counter[int]:
+def _companions_from_counter(base: Counter[int], self_stack: int) -> Counter[int]:
     """Stacks of everyone else at the table (one copy of self_stack removed)."""
-    counts = Counter(stacks)
+    counts = base.copy()
     if counts[self_stack] > 0:
         counts[self_stack] -= 1
         if counts[self_stack] == 0:
@@ -349,8 +387,20 @@ def _companions(stacks: list[int], self_stack: int) -> Counter[int]:
     return counts
 
 
+def _companions(stacks: list[int], self_stack: int) -> Counter[int]:
+    """Stacks of everyone else at the table (one copy of self_stack removed)."""
+    return _companions_from_counter(Counter(stacks), self_stack)
+
+
 def _multiset_overlap(a: Counter[int], b: Counter[int]) -> int:
-    return sum(min(a[k], b[k]) for k in a.keys() | b.keys())
+    if len(a) > len(b):
+        a, b = b, a
+    total = 0
+    for k, va in a.items():
+        vb = b.get(k)
+        if vb:
+            total += va if va < vb else vb
+    return total
 
 
 def cash_table_id(text: str) -> str | None:
@@ -376,69 +426,129 @@ def parse_seat_stacks_cents(text: str) -> list[tuple[str, int]]:
     return out
 
 
-def compute_end_stacks_cents(text: str) -> dict[str, int]:
+def compute_end_stacks_cents(
+    text: str,
+    *,
+    initial_seats: list[tuple[str, int]] | None = None,
+) -> dict[str, int]:
     """Approximate end-of-hand stacks (cents) from seats + action lines."""
-    stacks = dict(parse_seat_stacks_cents(text))
+    stacks = dict(initial_seats if initial_seats is not None else parse_seat_stacks_cents(text))
     if not stacks:
         return stacks
 
     street_in: dict[str, int] = defaultdict(int)
+    in_summary = False
     for line in text.splitlines():
         stripped = line.strip()
-        if _STREET_RE.match(stripped):
-            street_in.clear()
+        if not stripped:
+            continue
+        if stripped[0] == "*":
+            sm = _STREET_RE.match(stripped)
+            if sm:
+                street_name = sm.group(1).upper()
+                # Blinds posted before HOLE CARDS belong to the preflop round;
+                # only clear street contributions when advancing to flop/turn/river/etc.
+                if street_name != "HOLE CARDS":
+                    street_in.clear()
+                if street_name == "SUMMARY":
+                    in_summary = True
+                continue
+        if in_summary:
             continue
 
-        m = _POST_RE.match(stripped)
-        if m and m.group(1) in stacks:
-            amt = _to_chip_units(m.group(2))
-            stacks[m.group(1)] -= amt
-            street_in[m.group(1)] += amt
+        if ": " in stripped:
+            if "posts " in stripped:
+                m = _POST_ANTE_RE.match(stripped)
+                if m:
+                    name = m.group(1)
+                    if name in stacks:
+                        # Antes reduce stack but do not count toward street raises.
+                        stacks[name] -= _to_chip_units(m.group(2))
+                    continue
+
+                m = _POST_BLIND_RE.match(stripped)
+                if m:
+                    name = m.group(1)
+                    if name in stacks:
+                        amt = _to_chip_units(m.group(2))
+                        stacks[name] -= amt
+                        street_in[name] += amt
+                    continue
+
+                m = _POST_GENERIC_RE.match(stripped)
+                if m:
+                    name = m.group(1)
+                    if name in stacks:
+                        amt = _to_chip_units(m.group(2))
+                        stacks[name] -= amt
+                        street_in[name] += amt
+                    continue
+
+            m = _RAISE_RE.match(stripped)
+            if m:
+                name = m.group(1)
+                if name in stacks:
+                    to_amt = _to_chip_units(m.group(3))
+                    already = street_in[name]
+                    add = to_amt - already
+                    if add > 0:
+                        stacks[name] -= add
+                        street_in[name] = to_amt
+                continue
+
+            m = _BET_RE.match(stripped)
+            if m:
+                name = m.group(1)
+                if name in stacks:
+                    amt = _to_chip_units(m.group(2))
+                    stacks[name] -= amt
+                    street_in[name] += amt
+                continue
+
+            m = _ALLIN_RE.match(stripped)
+            if m:
+                name = m.group(1)
+                if name in stacks:
+                    amt = _to_chip_units(m.group(2))
+                    stacks[name] -= amt
+                    street_in[name] += amt
+                continue
+
+            m = _CALL_RE.match(stripped)
+            if m:
+                name = m.group(1)
+                if name in stacks:
+                    amt = _to_chip_units(m.group(2))
+                    stacks[name] -= amt
+                    street_in[name] += amt
+                continue
+
+            m = _RETURN_RE.match(stripped)
+            if m:
+                name = m.group(1)
+                if name in stacks:
+                    amt = _to_chip_units(m.group(2))
+                    stacks[name] += amt
+                    street_in[name] = max(0, street_in[name] - amt)
+                continue
             continue
 
-        m = _RAISE_RE.match(stripped)
-        if m and m.group(1) in stacks:
-            to_amt = _to_chip_units(m.group(3))
-            already = street_in[m.group(1)]
-            add = to_amt - already
-            if add > 0:
-                stacks[m.group(1)] -= add
-                street_in[m.group(1)] = to_amt
+        if stripped.startswith("Uncalled bet") or stripped.startswith("uncalled bet"):
+            m = _UNCALLED_RE.match(stripped)
+            if m:
+                amt = _to_chip_units(m.group(1))
+                name = m.group(2)
+                if name in stacks:
+                    stacks[name] += amt
+                    street_in[name] = max(0, street_in[name] - amt)
             continue
 
-        m = _BET_RE.match(stripped)
-        if m and m.group(1) in stacks:
-            amt = _to_chip_units(m.group(2))
-            stacks[m.group(1)] -= amt
-            street_in[m.group(1)] += amt
-            continue
-
-        m = _CALL_RE.match(stripped)
-        if m and m.group(1) in stacks:
-            amt = _to_chip_units(m.group(2))
-            stacks[m.group(1)] -= amt
-            street_in[m.group(1)] += amt
-            continue
-
-        m = _RETURN_RE.match(stripped)
-        if m and m.group(1) in stacks:
-            amt = _to_chip_units(m.group(2))
-            stacks[m.group(1)] += amt
-            street_in[m.group(1)] = max(0, street_in[m.group(1)] - amt)
-            continue
-
-        m = _UNCALLED_RE.match(stripped)
-        if m:
-            amt = _to_chip_units(m.group(1))
-            name = m.group(2)
-            if name in stacks:
-                stacks[name] += amt
-                street_in[name] = max(0, street_in[name] - amt)
-            continue
-
-        m = _COLLECTED_RE.match(stripped)
-        if m and m.group(1) in stacks:
-            stacks[m.group(1)] += _to_chip_units(m.group(2))
+        if " collected " in stripped:
+            m = _COLLECTED_RE.match(stripped)
+            if m:
+                name = m.group(1)
+                if name in stacks:
+                    stacks[name] += _to_chip_units(m.group(2))
             continue
 
     return stacks
@@ -466,8 +576,16 @@ def apply_name_map(text: str, hand_map: dict[str, str]) -> str:
     if not hand_map:
         return text
 
-    for token in sorted(hand_map, key=len, reverse=True):
-        name = hand_map[token]
-        text = re.sub(rf"(?<!\w){re.escape(token)}(?!\w)", name, text)
+    tokens = sorted(hand_map, key=len, reverse=True)
+    pattern = re.compile(r"(?<!\w)(?:" + "|".join(re.escape(t) for t in tokens) + r")(?!\w)")
+    repl = lambda m: hand_map[m.group(0)]
 
-    return text
+    # Skip hand header / Table / Tournament lines so all-digit tokens (e.g. 12345678)
+    # cannot corrupt Hand #, Tournament #, or table/title text.
+    lines = text.splitlines(keepends=True)
+    if len(lines) >= 2 and lines[0].lstrip().startswith(_HEADER_OR_TABLE_PREFIXES):
+        skip = 1
+        if lines[1].lstrip().startswith(_HEADER_OR_TABLE_PREFIXES):
+            skip = 2
+        return "".join(lines[:skip]) + pattern.sub(repl, "".join(lines[skip:]))
+    return pattern.sub(repl, text)

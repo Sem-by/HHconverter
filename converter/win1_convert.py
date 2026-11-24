@@ -33,28 +33,31 @@ _TABLE_CASH_RE = re.compile(
 )
 _MONEY_SPACE_RE = re.compile(r"([\d,.]+)\s+\$")
 _UNCALLED_RE = re.compile(
-    r"^Uncalled bet \(([^)]+)\) returned to (\S+)\s*$",
+    r"^Uncalled bet \(([^)]+)\) returned to (.+?)\s*$",
     re.I,
 )
-_EMPTY_DEALT_RE = re.compile(r"^Dealt to \S+\s*$")
+_DEALT_CARDS_EOL_RE = re.compile(
+    r"\[(?:10|[2-9TJQKA])[cdhs](?:\s+(?:10|[2-9TJQKA])[cdhs])*\]\s*$",
+    re.I,
+)
 _BUYIN_RE = re.compile(
     r"([\d,.]+)\s*\$\s*\+\s*([\d,.]+)\s*\$",
 )
 _BUYIN_SINGLE_RE = re.compile(r"([\d,.]+)\s*\$")
-_SEAT_LINE_RE = re.compile(r"^Seat\s+(\d+):\s+(\S+)\s+\(")
+_SEAT_LINE_RE = re.compile(r"^Seat\s+(\d+):\s+(.+?)\s+\([^)]*in chips\)\s*$")
 _BUTTON_RE = re.compile(r"Seat\s+#(\d+)\s+is\s+the\s+button", re.I)
-_SB_POST_RE = re.compile(r"^(\S+):\s+posts\s+small\s+blind\b", re.I)
-_BB_POST_RE = re.compile(r"^(\S+):\s+posts\s+big\s+blind\b", re.I)
+_SB_POST_RE = re.compile(r"^(.+?):\s+posts\s+small\s+blind\b", re.I)
+_BB_POST_RE = re.compile(r"^(.+?):\s+posts\s+big\s+blind\b", re.I)
+_WS_RE = re.compile(r"\s+")
 
 # Hand2Note-style table prefix for 1Win (parallel to GG_ / CPR_).
 _ONEWIN_TABLE_PREFIX = "1W_"
 
 
 def is_onewin_cash_hand(block: str) -> bool:
-    lines = block.splitlines()
-    if not lines:
+    header = block.partition("\n")[0].strip()
+    if not header:
         return False
-    header = lines[0].strip()
     m = _HAND_HEADER_RE.match(header)
     if not m:
         return False
@@ -65,12 +68,12 @@ def is_onewin_cash_hand(block: str) -> bool:
 
 
 def onewin_tournament_id(block: str) -> str:
-    lines = block.splitlines()
-    if not lines:
+    header = block.partition("\n")[0].strip()
+    if not header:
         raise ValueError("empty 1Win hand")
-    m = _HAND_HEADER_RE.match(lines[0].strip())
+    m = _HAND_HEADER_RE.match(header)
     if not m:
-        raise ValueError(f"Unrecognized 1Win header: {lines[0]!r}")
+        raise ValueError(f"Unrecognized 1Win header: {header!r}")
     tm = _TOURNEY_TAIL_RE.match(m.group(2).strip())
     if not tm:
         raise ValueError(f"Unrecognized 1Win tournament header: {m.group(2)!r}")
@@ -79,15 +82,23 @@ def onewin_tournament_id(block: str) -> str:
 
 def onewin_group_key(block: str) -> str:
     if is_onewin_cash_hand(block):
-        meta = onewin_cash_meta(block)
-        return f"cash|{meta[0].isoformat()}|{meta[1]}|{meta[2]}"
+        try:
+            meta = onewin_cash_meta(block)
+            return f"cash|{meta[0].isoformat()}|{meta[1]}|{meta[2]}"
+        except ValueError:
+            header = block.partition("\n")[0].strip()
+            m = _HAND_HEADER_RE.match(header)
+            cm = _CASH_TAIL_RE.match(m.group(2).strip()) if m else None
+            stakes = _CASH_STAKES_RE.search(cm.group(1)) if cm else None
+            if stakes:
+                return f"cash|unknown-date|{_fmt_stakes(stakes.group(1))}|{_fmt_stakes(stakes.group(2))}"
+            raise
     return onewin_tournament_id(block)
 
 
 def onewin_cash_meta(block: str) -> tuple[date, str, str]:
     """Return (played_on, sb, bb) for a cash hand."""
-    lines = block.splitlines()
-    header = lines[0].strip()
+    header = block.partition("\n")[0].strip()
     m = _HAND_HEADER_RE.match(header)
     if not m:
         raise ValueError(f"Unrecognized 1Win header: {header!r}")
@@ -105,8 +116,7 @@ def onewin_cash_meta(block: str) -> tuple[date, str, str]:
 
 def onewin_tournament_meta(block: str) -> tuple[str, str, str, date]:
     """Return (tid, price, name, played_on)."""
-    lines = block.splitlines()
-    header = lines[0].strip()
+    header = block.partition("\n")[0].strip()
     m = _HAND_HEADER_RE.match(header)
     if not m:
         raise ValueError(f"Unrecognized 1Win header: {header!r}")
@@ -120,31 +130,76 @@ def onewin_tournament_meta(block: str) -> tuple[str, str, str, date]:
     return tid, price, name, played
 
 
-_SEAT_NAME_RE = re.compile(
-    r"^Seat\s+\d+:\s+(\S+)\s+\(",
-    re.I | re.M,
-)
 _ONEWIN_NAME_SUFFIX = "_1win"
 
 
 def _suffix_all_players(text: str) -> str:
     """Append ``_1win`` to every seated player name (room isolation in H2N)."""
-    names = []
+    lines = text.splitlines()
+    if not lines:
+        return text
+
+    names: list[str] = []
     seen: set[str] = set()
-    for m in _SEAT_NAME_RE.finditer(text):
-        name = m.group(1)
-        if name in seen:
-            continue
-        seen.add(name)
-        names.append(name)
-    # Longer names first so partial overlaps cannot rewrite already-suffixed tokens.
+    for line in lines:
+        if line.startswith("*** HOLE CARDS ***") or line.startswith("*** SUMMARY ***"):
+            break
+        sm = _SEAT_LINE_RE.match(line)
+        if sm:
+            name = sm.group(2)
+            if name not in seen and not name.endswith(_ONEWIN_NAME_SUFFIX):
+                seen.add(name)
+                names.append(name)
+
+    if not names:
+        return text
+
+    # Longer names first so prefix overlaps match the full seated player name.
     names.sort(key=len, reverse=True)
-    for name in names:
-        if name.endswith(_ONEWIN_NAME_SUFFIX):
+    alt = "|".join(re.escape(n) for n in names)
+    seat_re = re.compile(rf"^(Seat\s+\d+:\s+)({alt})(?=\s|$)")
+    dealt_re = re.compile(rf"^(Dealt to\s+)({alt})(?=\s+\[|\s*$)")
+    uncalled_re = re.compile(rf"^(Uncalled bet \([^)]+\) returned to\s+)({alt})(\s*)$", re.I)
+    actor_re = re.compile(
+        rf"^({alt})(?=:|\s+(?:collected|doesn't|does not|finished|joins|leaves|has|is|was|wins|won|said)\b)",
+        re.I,
+    )
+
+    out: list[str] = []
+    append = out.append
+    for idx, line in enumerate(lines):
+        if idx < 2 and (
+            line.startswith("PokerStars Hand #")
+            or line.startswith("1WinPoker Hand #")
+            or line.startswith("Table '")
+        ):
+            append(line)
             continue
-        pattern = re.compile(r"(?<!\w)" + re.escape(name) + r"(?!\w)")
-        text = pattern.sub(name + _ONEWIN_NAME_SUFFIX, text)
-    return text
+        if not line or line[0] == "*" or line.startswith("Total pot") or line.startswith("Board ["):
+            append(line)
+            continue
+        if line.startswith("Seat "):
+            m = seat_re.match(line)
+            if m:
+                append(f"{m.group(1)}{m.group(2)}{_ONEWIN_NAME_SUFFIX}{line[m.end():]}")
+                continue
+        elif line.startswith("Dealt to "):
+            m = dealt_re.match(line)
+            if m:
+                append(f"{m.group(1)}{m.group(2)}{_ONEWIN_NAME_SUFFIX}{line[m.end():]}")
+                continue
+        elif line.startswith("Uncalled bet ") or line.startswith("uncalled bet "):
+            m = uncalled_re.match(line)
+            if m:
+                append(f"{m.group(1)}{m.group(2)}{_ONEWIN_NAME_SUFFIX}{m.group(3)}")
+                continue
+        else:
+            m = actor_re.match(line)
+            if m:
+                append(f"{m.group(1)}{_ONEWIN_NAME_SUFFIX}{line[m.end():]}")
+                continue
+        append(line)
+    return "\n".join(out)
 
 
 class OneWinConverter:
@@ -164,12 +219,13 @@ class OneWinConverter:
 
         hid = onewin_display_hand_id(m.group(1))
         tail = m.group(2).strip()
+        cash = not tail.lower().startswith("tournament") and bool(_CASH_TAIL_RE.match(tail))
 
-        if is_onewin_cash_hand(block):
+        if cash:
             converted = self._convert_cash(hid, tail, lines[1:])
         else:
             converted = self._convert_tournament(hid, tail, lines[1:])
-        return _postprocess_ps_hand(_suffix_all_players(converted))
+        return _postprocess_ps_hand(_suffix_all_players(converted), cash=cash)
 
     def _convert_cash(self, hid: str, tail: str, body_lines: list[str]) -> str:
         cm = _CASH_TAIL_RE.match(tail)
@@ -241,13 +297,13 @@ class OneWinConverter:
 def _clean_table_name(name: str) -> str:
     """Strip ``#`` so H2N does not confuse table tags with ``Seat #N``."""
     cleaned = name.replace("#", " ")
-    return re.sub(r"\s+", " ", cleaned).strip()
+    return _WS_RE.sub(" ", cleaned).strip()
 
 
-def _postprocess_ps_hand(text: str) -> str:
+def _postprocess_ps_hand(text: str, *, cash: bool | None = None) -> str:
     """H2N-friendly fixes: blinds required as a pair; bomb-pot preflop; no walk SHOW DOWN."""
     lines = text.splitlines()
-    lines = _ensure_blind_posts(lines)
+    lines = _ensure_blind_posts(lines, cash=cash)
     lines = _fill_skipped_preflop(lines)
     lines = _strip_walk_showdown(lines)
     return "\n".join(lines)
@@ -275,7 +331,7 @@ def _preflop_action_order(seats: dict[int, str], bb_seat: int) -> list[str]:
     return order
 
 
-def _ensure_blind_posts(lines: list[str]) -> list[str]:
+def _ensure_blind_posts(lines: list[str], *, cash: bool | None = None) -> list[str]:
     """Hand2Note ignores a lone BB and crashes on ante-only (bomb pot) hands.
 
     Inject missing SB/BB as ``$0`` / ``0`` so positions resolve without changing pot.
@@ -285,6 +341,7 @@ def _ensure_blind_posts(lines: list[str]) -> list[str]:
     has_sb = False
     has_bb = False
     hole_idx: int | None = None
+    seat_has_dollar = False
 
     for i, line in enumerate(lines):
         if btn_m is None:
@@ -292,6 +349,8 @@ def _ensure_blind_posts(lines: list[str]) -> list[str]:
         sm = _SEAT_LINE_RE.match(line)
         if sm:
             seats[int(sm.group(1))] = sm.group(2)
+            if "($" in line:
+                seat_has_dollar = True
             continue
         if hole_idx is None and line.strip() == "*** HOLE CARDS ***":
             hole_idx = i
@@ -310,9 +369,15 @@ def _ensure_blind_posts(lines: list[str]) -> list[str]:
 
     button = int(btn_m.group(1))
     seat_nums = list(seats.keys())
-    sb_seat = _next_occupied_seat(seat_nums, button)
-    bb_seat = _next_occupied_seat(seat_nums, sb_seat)
-    zero = "$0" if any("$" in ln for ln in lines[: hole_idx + 1]) else "0"
+    if len(seats) == 2 and button in seats:
+        # Heads-up: the button posts the small blind; the other seat is big blind.
+        sb_seat = button
+        bb_seat = _next_occupied_seat(seat_nums, button)
+    else:
+        sb_seat = _next_occupied_seat(seat_nums, button)
+        bb_seat = _next_occupied_seat(seat_nums, sb_seat)
+    is_cash = seat_has_dollar if cash is None else cash
+    zero = "$0" if is_cash else "0"
 
     result = list(lines)
     # SB must appear before BB or H2N drops the BB flag.
@@ -334,7 +399,7 @@ def _ensure_blind_posts(lines: list[str]) -> list[str]:
 
 
 _ACTION_LINE_RE = re.compile(
-    r"^(\S+):\s+(folds|checks|calls|bets|raises)\b",
+    r"^.+?:\s+(folds|checks|calls|bets|raises)\b",
     re.I,
 )
 
@@ -411,17 +476,18 @@ def _strip_walk_showdown(lines: list[str]) -> list[str]:
 
 def _convert_body_line(line: str, *, cash: bool) -> str | None:
     stripped = line.rstrip()
-    if _EMPTY_DEALT_RE.match(stripped):
+    if stripped.startswith("Dealt to ") and not _DEALT_CARDS_EOL_RE.search(stripped):
         return None
-    if cash:
+    if cash and "$" in stripped:
         stripped = _money_to_ps(stripped)
-    m = _UNCALLED_RE.match(stripped)
-    if m:
-        return f"Uncalled bet ({m.group(1)}) returned to {m.group(2)}"
+    if stripped.startswith("Uncalled bet ") or stripped.startswith("uncalled bet "):
+        m = _UNCALLED_RE.match(stripped)
+        if m:
+            return f"Uncalled bet ({m.group(1)}) returned to {m.group(2)}"
     if "doesn't show hand" in stripped.lower():
         return stripped
-    if " won (" in stripped and "showed" not in stripped:
-        stripped = re.sub(r"\bwon \(", "collected (", stripped)
+    if " won (" in stripped and stripped.startswith("Seat ") and "showed" not in stripped:
+        stripped = stripped.replace(" won (", " collected (")
     return stripped
 
 

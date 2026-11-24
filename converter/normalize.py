@@ -1,33 +1,58 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
+
+_GAME_ENDED_RE = re.compile(r"(?m)^Game ended:.*(?:\n|$)")
+_BOARD_RE = re.compile(r"Board \[(.*?)\]", re.DOTALL)
+_WS_RE = re.compile(r"\s+")
+_HEADER_OR_TABLE_PREFIXES = (
+    "PokerStars Hand #",
+    "Poker Hand #",
+    "CoinPoker Hand #",
+    "PokerPlanets Hand #",
+    "1WinPoker Hand #",
+    "Table '",
+    "Tournament '",
+)
+
+
+def _board_norm(m: re.Match[str]) -> str:
+    inner = m.group(1)
+    if "[ " in inner:
+        inner = inner.replace("[ ", "[")
+    if " ]" in inner:
+        inner = inner.replace(" ]", "]")
+    inner = _WS_RE.sub(" ", inner.strip())
+    return "Board [" + inner + "]"
 
 
 def global_postprocess(text: str, *, trim_total_pot: bool = True) -> str:
-    text = re.sub(r"(?m)^Game ended:.*\n", "", text)
+    if "Game ended:" in text:
+        text = _GAME_ENDED_RE.sub("", text)
 
-    def board_norm(m: re.Match[str]) -> str:
-        inner = m.group(1)
-        inner = inner.replace("[ ", "[").replace(" ]", "]")
-        inner = re.sub(r"\s+", " ", inner.strip())
-        return "Board [" + inner + "]"
-
-    text = re.sub(r"Board \[(.*?)\]", board_norm, text, flags=re.DOTALL)
+    if "Board [" in text:
+        text = _BOARD_RE.sub(_board_norm, text)
 
     lines_out: list[str] = []
+    append = lines_out.append
 
     for line in text.splitlines():
-        stripped = line.lstrip()
+        if trim_total_pot:
+            stripped = line.lstrip()
+            if stripped.startswith("Total pot"):
+                pot_only = stripped.split("|", 1)[0].rstrip()
+                if " $" in pot_only:
+                    rake = "$0"
+                elif " €" in pot_only:
+                    rake = "€0"
+                else:
+                    rake = "0"
+                line = f"{pot_only} | Rake {rake}"
 
-        if trim_total_pot and stripped.startswith("Total pot"):
-            pot_only = stripped.split("|", 1)[0].rstrip()
-            line = pot_only + " | Rake 0"
+        append(line.rstrip())
 
-        lines_out.append(line.rstrip())
-
-    text = "\n".join(lines_out)
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-    return text.rstrip() + "\n"
+    return "\n".join(lines_out).rstrip() + "\n"
 
 
 _MISSING_POKER_HAND_COLON_RE = re.compile(
@@ -51,8 +76,27 @@ def up_postprocess(text: str) -> str:
     return global_postprocess(text, trim_total_pot=False)
 
 
+@lru_cache(maxsize=256)
+def _token_pattern(seat_token: str) -> re.Pattern[str]:
+    return re.compile(r"(?<!\w)" + re.escape(seat_token) + r"(?!\w)")
+
+
 def replace_seat_token(text: str, seat_token: str, replacement: str) -> str:
-    if not seat_token:
+    if not seat_token or seat_token == replacement or seat_token not in text:
         return text
-    pattern = re.compile(r"(?<!\w)" + re.escape(seat_token) + r"(?!\w)")
-    return pattern.sub(replacement, text)
+    pattern = _token_pattern(seat_token)
+    repl = lambda _m: replacement
+
+    # Preserve hand header / Table metadata lines so a Hero token matching a word
+    # in the tournament title or table name (e.g. "Hero Bounty") is never mangled.
+    lines = text.splitlines(keepends=True)
+    if len(lines) >= 2 and lines[0].lstrip().startswith(_HEADER_OR_TABLE_PREFIXES):
+        skip = 1
+        if lines[1].lstrip().startswith(_HEADER_OR_TABLE_PREFIXES):
+            skip = 2
+        head = "".join(lines[:skip])
+        body = "".join(lines[skip:])
+        if seat_token not in body:
+            return text
+        return head + pattern.sub(repl, body)
+    return pattern.sub(repl, text)

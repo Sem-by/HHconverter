@@ -13,7 +13,9 @@ _HAND_START = (
     "PokerPlanets Hand #",
     "CoinPoker Hand #",
     "1WinPoker Hand #",
+    "***** 888poker Hand History",
 )
+_GAME_NO_START = re.compile(r"^#Game No\s*:", re.I)
 _SUMMARY_START = re.compile(r"^Tournament\s+#", re.I)
 _GG_NAME_RE = re.compile(r"^GG\d{8}", re.I)
 _UP_NAME_RE = re.compile(r"^UP\d{8}", re.I)
@@ -26,6 +28,8 @@ _HH_FIRST_LINE_PREFIXES = (
     "1WinPoker Hand #",
     "***** 888poker Hand History",
 )
+_INVALID_MEMBER_CHARS_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_HEADER_PROBE_BYTES = 2048
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,7 +37,7 @@ class ZipMember:
     zip_path: Path
     member_name: str
     kind: str  # "hands" | "summaries" | "converted" | "unknown"
-    room: str  # "ggpoker_ok" | "uppoker" | "coinpoker" | "unknown"
+    room: str  # "ggpoker_ok" | "uppoker" | "coinpoker" | "888poker" | "unknown"
     year: int | None
 
 
@@ -43,24 +47,46 @@ def list_import_zips(root: Path) -> list[Path]:
     return sorted(p for p in root.iterdir() if p.is_file() and p.suffix.lower() == ".zip")
 
 
+def _read_first_nonempty_line(zf: zipfile.ZipFile, info: zipfile.ZipInfo) -> str:
+    """Read only the leading bytes of a zip member to inspect its first non-empty line."""
+    try:
+        with zf.open(info) as fh:
+            raw = fh.read(_HEADER_PROBE_BYTES)
+    except (KeyError, zipfile.BadZipFile, OSError):
+        return ""
+    text = raw.decode("utf-8-sig", errors="replace")
+    for line in text.splitlines():
+        stripped = line.lstrip("\ufeff").strip()
+        if stripped:
+            return stripped
+    return ""
+
+
+def _is_macos_metadata_member(filename: str) -> bool:
+    parts = filename.replace("\\", "/").split("/")
+    if "__MACOSX" in parts:
+        return True
+    name = parts[-1]
+    return name.startswith("._")
+
+
 def zip_looks_like_hand_history(path: Path) -> bool:
     """Quick probe: zip contains raw HH/summary .txt (not already-converted PokerStars)."""
     try:
         with zipfile.ZipFile(path) as zf:
             checked = 0
             for info in zf.infolist():
-                if info.is_dir():
+                if info.is_dir() or _is_macos_metadata_member(info.filename):
                     continue
                 name = Path(info.filename).name
                 if not name.lower().endswith(".txt"):
                     continue
-                try:
-                    raw = zf.read(info.filename)[:800]
-                except KeyError:
-                    continue
-                text = raw.decode("utf-8-sig", errors="replace")
-                first = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
-                if first.startswith(_HH_FIRST_LINE_PREFIXES) or _SUMMARY_START.match(first):
+                first = _read_first_nonempty_line(zf, info)
+                if (
+                    first.startswith(_HH_FIRST_LINE_PREFIXES)
+                    or _GAME_NO_START.match(first)
+                    or _SUMMARY_START.match(first)
+                ):
                     return True
                 checked += 1
                 if checked >= 8:
@@ -76,22 +102,17 @@ def classify_zip(path: Path) -> list[ZipMember]:
     try:
         with zipfile.ZipFile(path) as zf:
             for info in zf.infolist():
-                if info.is_dir():
+                if info.is_dir() or _is_macos_metadata_member(info.filename):
                     continue
                 name = Path(info.filename).name
                 if not name.lower().endswith(".txt"):
                     continue
-                try:
-                    raw = zf.read(info.filename)
-                except KeyError:
-                    continue
-                text = raw.decode("utf-8-sig", errors="replace")
-                first = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
+                first = _read_first_nonempty_line(zf, info)
                 kind = _member_kind(first)
-                room = _member_room(name, first)
-                year = _year_from_name(name)
                 if kind in {"converted", "unknown"}:
                     continue
+                room = _member_room(name, first)
+                year = _year_from_name(name)
                 out.append(
                     ZipMember(
                         zip_path=path,
@@ -106,15 +127,24 @@ def classify_zip(path: Path) -> list[ZipMember]:
     return out
 
 
-def extract_zip_member(path: Path, member_name: str, dest_dir: Path) -> Path:
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(path) as zf:
-        data = zf.read(member_name)
-    # Flatten archive paths but keep folder segments so same basenames do not collide.
-    flat = member_name.replace("\\", "/").lstrip("/")
-    safe_name = flat.replace("/", "__")
+def _safe_flat_member_name(member_name: str) -> str:
+    # Flatten archive paths, dropping traversal segments and illegal Windows filename chars.
+    raw_parts = member_name.replace("\\", "/").split("/")
+    safe_parts: list[str] = []
+    for part in raw_parts:
+        if not part or part in {".", ".."}:
+            continue
+        cleaned = _INVALID_MEMBER_CHARS_RE.sub("_", part).strip(" .")
+        if cleaned:
+            safe_parts.append(cleaned)
+    safe_name = "__".join(safe_parts) or "member"
     if not safe_name.lower().endswith(".txt"):
         safe_name = f"{safe_name}.txt"
+    return safe_name
+
+
+def _write_unique_member(dest_dir: Path, member_name: str, data: bytes) -> Path:
+    safe_name = _safe_flat_member_name(member_name)
     dest = dest_dir / safe_name
     if dest.exists():
         stem = dest.stem
@@ -130,16 +160,37 @@ def extract_zip_member(path: Path, member_name: str, dest_dir: Path) -> Path:
     return dest
 
 
+def extract_zip_member(path: Path, member_name: str, dest_dir: Path) -> Path:
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path) as zf:
+        data = zf.read(member_name)
+    return _write_unique_member(dest_dir, member_name, data)
+
+
+def extract_zip_members(
+    path: Path,
+    member_names: list[str],
+    dest_dir: Path,
+) -> list[Path]:
+    """Extract multiple members in a single ZipFile open."""
+    if not member_names:
+        return []
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    out: list[Path] = []
+    with zipfile.ZipFile(path) as zf:
+        for member_name in member_names:
+            data = zf.read(member_name)
+            out.append(_write_unique_member(dest_dir, member_name, data))
+    return out
+
+
 def extract_hand_zips_to_temp(zips: list[Path]) -> tuple[Path, list[Path]]:
     """Extract hand-history members from zips into a temp folder. Returns (tmpdir, files)."""
     tmp = Path(tempfile.mkdtemp(prefix="hhconv_zip_"))
     files: list[Path] = []
     for zpath in zips:
-        for member in classify_zip(zpath):
-            if member.kind != "hands":
-                continue
-            dest = extract_zip_member(zpath, member.member_name, tmp)
-            files.append(dest)
+        names = [m.member_name for m in classify_zip(zpath) if m.kind == "hands"]
+        files.extend(extract_zip_members(zpath, names, tmp))
     return tmp, files
 
 
@@ -155,7 +206,7 @@ def iter_summary_members(zips: list[Path]) -> list[ZipMember]:
 def _member_kind(first_line: str) -> str:
     if first_line.startswith("PokerStars Hand #"):
         return "converted"
-    if any(first_line.startswith(p) for p in _HAND_START):
+    if first_line.startswith(_HAND_START) or _GAME_NO_START.match(first_line):
         return "hands"
     if _SUMMARY_START.match(first_line):
         return "summaries"
@@ -170,6 +221,8 @@ def _member_room(filename: str, first_line: str) -> str:
         return "poker_planets"
     if first_line.startswith("1WinPoker Hand #"):
         return "onewin"
+    if first_line.startswith("***** 888poker Hand History") or _GAME_NO_START.match(first_line):
+        return "888poker"
     if _UP_NAME_RE.match(name):
         return "uppoker"
     if _GG_NAME_RE.match(name):
